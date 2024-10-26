@@ -1,130 +1,133 @@
-## LLM Agent Memory System Design with SQLite (Turso) and RAG
+## AI Agent Memory System Design Document
 
-This document outlines the design of a memory system for an LLM agent, leveraging SQLite (Turso) for storage and a Retrieval-Augmented Generation (RAG) strategy for knowledge retrieval. The system integrates short-term and long-term memory, incorporates keywords for efficient search, and utilizes entity and relationship structures for richer knowledge representation.
+Package path (put all the implementation in this package): `src.memory`
 
-### 1. Overview
-
-The goal is to build a robust and scalable memory system that enables the LLM agent to:
-
-* **Retain context:** Remember past interactions within a conversation (short-term memory).
-* **Access knowledge:** Retrieve relevant information from a larger knowledge base (long-term memory).
-* **Understand relationships:**  Comprehend connections between different concepts and entities.
-* **Reason and infer:**  Draw conclusions and make inferences based on stored knowledge.
-
-### 2. Technology Stack
-
-* **SQLite (Turso):** A serverless, distributed SQL database that provides scalability and ease of use.
-* **RAG:** A technique that retrieves relevant information from a knowledge base to augment the LLM's prompt, improving response quality and accuracy.
-
-### 3. Data Schema
-
-The memory system is implemented using the following tables in SQLite:
-
-**3.1 ShortTermMemory:**
-
-| Column            | Data Type         | Description                                            |
-| ----------------- | ----------------- | ------------------------------------------------------ |
-| `conversation_id` | TEXT, PRIMARY KEY | Unique identifier for each conversation.               |
-| `turn_id`         | INTEGER           | Sequential number for each turn within a conversation. |
-| `speaker`         | TEXT              | "user" or "agent".                                     |
-| `utterance`       | TEXT              | The text of the spoken turn.                           |
-| `timestamp`       | DATETIME          | Timestamp of the turn.                                 |
-
-**3.2 LongTermMemory:**
-
-| Column          | Data Type         | Description                                                                   |
-| --------------- | ----------------- | ----------------------------------------------------------------------------- |
-| `document_id`   | TEXT, PRIMARY KEY | Unique identifier for each document.                                          |
-| `document_text` | TEXT              | The content of the document.                                                  |
-| `embedding`     | TBD               | Vector embedding of the document text.                                        |
-| `source`        | TBD               | A list of source, reference of the document (e.g., website, file). (optional) |
-| `metadata`      | TEXT              | JSON string containing additional metadata (e.g., author, date).              |
-| `keywords`      | TEXT              | Comma-separated list of relevant keywords for the document.                   |
+PLEASE USE SQLITE VEC INSTEAD OF SQLITE-TURSO. because sqlite-turso does not support for python development now.
 
 
-**3.3 ConversationContext:**
-
-| Column               | Data Type         | Description                                                                                               |
-| -------------------- | ----------------- | --------------------------------------------------------------------------------------------------------- |
-| `conversation_id`    | TEXT, PRIMARY KEY | Foreign key referencing `ShortTermMemory`.                                                                |
-| `relevant_documents` | TEXT              | Comma-separated list of `document_id`s from `LongTermMemory` deemed relevant to the current conversation. |
+Next Phase Implementation Plan:
+Phase 5: Integration to Agent
+Connect with the agent system
+Implement automated improvement mechanisms
 
 
-**3.4 Entities:**
+**1. Introduction**
 
-| Column        | Data Type         | Description                                                                  |
-| ------------- | ----------------- | ---------------------------------------------------------------------------- |
-| `entity_id`   | TEXT, PRIMARY KEY | Unique identifier for each entity.                                           |
-| `entity_name` | TEXT              | The name or label of the entity.                                             |
-| `entity_type` | TEXT              | Category or type of the entity (e.g., "person", "location", "organization"). |
-| `description` | TEXT              | Brief description of the entity.                                             |
-| embedding     | VECTOR            | embedding vector for de duplication via sematic search                       |
+This document outlines the design of a memory system for an AI agent, enabling it to learn from past interactions, understand complex relationships, and provide insightful responses. The system utilizes SQLite Turso as the primary storage, leverages an LLM for extraction and summarization, and incorporates a reward-based feedback mechanism for continuous improvement.
 
-**3.5 Relationships:**
+**2. System Architecture**
 
-| Column              | Data Type         | Description                                                         |
-| ------------------- | ----------------- | ------------------------------------------------------------------- |
-| `relationship_id`   | TEXT, PRIMARY KEY | Unique identifier for each relationship.                            |
-| `source_entity`     | TEXT              | Foreign key referencing `Entities.entity_id`.                       |
-| `target_entity`     | TEXT              | Foreign key referencing `Entities.entity_id`.                       |
-| `relationship_type` | TEXT              | The type of relationship (e.g., "works_at", "located_in", "knows"). |
+The memory system consists of four interconnected tables:
 
-**3.6 DocumentEntities (Join Table):**
+**2.1 Short-Term Memory**
 
-| Column        | Data Type | Description                                           |
-| ------------- | --------- | ----------------------------------------------------- |
-| `document_id` | TEXT      | Foreign key referencing `LongTermMemory.document_id`. |
-| `entity_id`   | TEXT      | Foreign key referencing `Entities.entity_id`.         |
+* **Purpose:** Stores detailed conversation data, including text, media, and files.
+* **Storage:** SQLite Turso
+* **Structure:**
+    * `conversation_id`: Unique identifier (INTEGER PRIMARY KEY)
+    * `turn_id`: the order number of the message (Integer)
+    * `timestamp`: Timestamp of each interaction (DATETIME)
+    * `sender`: Identifier for the sender (agent or user) (TEXT)
+    * `message_content`: Text, media URL, or file path (TEXT)
+    * `message_type`: Categorize the message (text, image, audio, etc.) (TEXT)
+* **Considerations:**
+    * Implement a mechanism to clear or archive older conversations.
+    * Consider compression for large media files or external storage with references.
+    * Using local file storage for media message type first (will consider to move into cloud storage)
 
-### 4. Relationships between Tables
+**2.2 Knowledge**
 
-* **ShortTermMemory** and **ConversationContext:** One-to-one relationship based on `conversation_id`.
-* **ConversationContext** and **LongTermMemory:** Many-to-many relationship through the `relevant_documents` field in `ConversationContext`.
-* **LongTermMemory** and **Entities:** Many-to-many relationship through the `DocumentEntities` join table.
-* **Entities** and **Relationships:**  One-to-many relationship where `source_entity` and `target_entity` in `Relationships` reference `entity_id` in `Entities`.
+* **Purpose:** Stores long-term knowledge extracted from various sources.
+* **Storage:** SQLite Turso
+* **Structure:**
+    * `knowledge_id`: Unique identifier (INTEGER PRIMARY KEY)
+    * `text`: The knowledge text itself (TEXT)
+    * `entities`: List of relevant entities (TEXT)
+    * `entity_embeddings`: Pre-computed entity embeddings (BLOB)
+    * `text_embedding`: Pre-computed text embedding (BLOB)
+    * `keywords`: List of extracted keywords (TEXT)
+* **Considerations:**
+    * Utilize the LLM for entity extraction, embedding generation, and keyword identification.
+    * Consider a vector database alongside SQLite Turso for efficient similarity search. SQLite Turso also support vector search.
 
-### 5. RAG Implementation
+**2.3 Entities**
 
-**5.1 Retrieval:**
+* **Purpose:** Stores relationships between entities and their embeddings.
+* **Storage:** SQLite Turso
+* **Structure:**
+    * `relationship_id`: Unique identifier (INTEGER PRIMARY KEY)
+    * `relationship_text`: Text representing the relationship (TEXT). Format "{entity_x} {relationship} {entity_y}"
+    * `embedding`: Embedding representing the relationship (BLOB)
+* **Considerations:**
+    * Utilize the LLM for relationship extraction and embedding generation.
+    * Consider a graph database for complex relationship modeling if needed.
 
-1. When a new user utterance is received, analyze the current conversation context (from `ShortTermMemory` and `ConversationContext`) and the user's question.
-2. Query `LongTermMemory` to retrieve relevant documents:
-    * **Semantic Search (optional):** If embeddings are used, calculate the embedding of the user's query and perform a similarity search against the `embedding` field in `LongTermMemory`.
-    * **Keyword-based Search:** Utilize the `keywords` field in `LongTermMemory` and SQLite's full-text search capabilities to find documents containing relevant keywords from the user's query.
-    * **Hybrid Approach:** Combine semantic and keyword-based search for optimal retrieval.
-3. Store the `document_id`s of the retrieved documents in the `relevant_documents` field of the corresponding `ConversationContext` entry.
+**2.4 Conversation Summary**
 
-**5.2 Augmentation:**
+* **Purpose:** Stores conversation summaries, feedback, and improvement suggestions.
+* **Storage:** SQLite Turso
+* **Structure:**
+    * `conversation_id`: Foreign key referencing Short-Term Memory (INTEGER)
+    * `prompt`: The initial prompt that started the conversation (TEXT)
+    * `feedback_text`: Detailed feedback on the conversation (TEXT)
+    * `example`: Example of desired agent behavior (TEXT)
+    * `improvement_suggestion`: LLM-generated suggestion (TEXT)
+    * `prompt_version`: Identifier for the prompt version used (TEXT)
+    * `reward_score`: Overall quality score for the conversation (REAL)
+    * `conversation_summary`: Summary of the conversation (TEXT)
+    * `timestamp`: Timestamp of the conversation (DATETIME)
+* **Considerations:**
+    * Utilize the LLM for summarization, feedback analysis, and suggestion generation.
+    * Implement a mechanism for the agent to learn from feedback and adjust its behavior.
+    * Define clear criteria and a method for assigning the reward score.
 
-1. Retrieve the content of the relevant documents from `LongTermMemory` using the `document_id`s stored in `ConversationContext`.
-2. Construct a new prompt for the LLM that includes the user's question, relevant conversation history (from `ShortTermMemory`), and the retrieved document content.
-3. The LLM generates a response based on this augmented prompt, incorporating the retrieved knowledge.
+**3. Tech Stack Integration**
+
+* **SQLite Turso:** Use the Turso client library for database interaction.
+* **LLM:** Integrate your chosen LLM (e.g., OpenAI API) for various tasks. We use mirascope.
+* **Workflow:** Design a clear workflow for data flow between the agent, LLM, and database. Consider using a message queue for asynchronous processing.
+
+**4. Retrieval Mechanism**
+
+* **Contextual Retrieval:** Retrieve relevant information from Knowledge and Entities tables based on user queries or conversation context. This involves understanding the user's intent and identifying relevant knowledge based on the current conversation flow.
+* **Similarity Search:** Utilize embeddings and vector databases for efficient similarity-based retrieval. This involves comparing the embedding of the user query or conversation context with the embeddings stored in the Knowledge and Entities tables to find the most semantically similar entries.
+* **Keyword-based Search:** Implement keyword-based search for quick retrieval of relevant knowledge entries. This involves extracting keywords from the user query and searching for knowledge entries that contain those keywords.
+* 
+* **Data flow examples:**
+    * **User query related to some knowledge:**
+        1. Perform similarity search between the user query embedding and the text embeddings of the retrieved knowledge entries. 
+        2. Get entities from the user query and the top-ranked knowledge entries.
+        3. Perform similarity search in the Entities table to find relationships that involve similar entities.
+        4. Re-rank the knowledge entries and entity relationships based on the combined similarity scores and relevance to the user query. (Using cross-encoder re-ranker for example)
+    * **User query related to some entities:**
+        1. Extract entities from the user query.
+        2. Perform similarity search in the Entities table to find relationships that involve similar entities.
+        3. Perform similarity search search on entity embedding in the Knowledge table to retrieve knowledge entries related to the identified entities.
+        4. Re-rank the entity relationships and knowledge entries based on the combined similarity scores and relevance to the user query. (Using cross-encoder re-ranker for example)
 
 
-### 6. Keyword and Entity Management
 
-* **Keyword Extraction:**  
-    * Use LLM automatically extract relevant keywords from documents added to `LongTermMemory`.
-    * Store the extracted keywords in the `keywords` field.
-* **Entity Recognition and Linking:**
-    * Employ LLM models to identify entities in documents added to `LongTermMemory`.
-    * Link identified entities to existing entries in the `Entities` table or create new entries if they don't exist.
-    * Populate the `DocumentEntities` table to establish the many-to-many relationship between documents and entities.
-* **Relationship Extraction:**
-    * Utilize relationship extraction techniques to identify relationships between entities mentioned in documents.
-    * Add identified relationships to the `Relationships` table, linking the corresponding entities.
+**5. Automated Improvement**
 
+* **Prompt Refinement:** Store prompt variations, track performance, and generate new prompts based on feedback.
+* **Self-Reflection:** Implement a mechanism for the agent to analyze its own performance and identify areas for self-improvement.
+* **External Knowledge Integration:** Integrate external APIs or knowledge graphs to enhance the agent's knowledge base.
 
-### 7. Example Workflow
+**6. Continuous Improvement**
 
-1. **User starts a new conversation:** A new entry is created in `ShortTermMemory` and `ConversationContext` with a unique `conversation_id`.
-2. **User asks a question:** The question is stored as a new turn in `ShortTermMemory`.
-3. **RAG Retrieval:** The agent retrieves relevant documents from `LongTermMemory` based on the question and conversation history using semantic search, keyword search, or a hybrid approach.
-4. **Context Update:** The `document_id`s of the retrieved documents are stored in the `relevant_documents` field of the `ConversationContext` entry.
-5. **LLM Prompt Augmentation:** The agent constructs a new prompt for the LLM, including the user's question, relevant conversation history, and the content of the retrieved documents.
-6. **Response Generation:** The LLM generates a response based on the augmented prompt.
-7. **Conversation Update:** The user's question and the agent's response are added as new turns in `ShortTermMemory`.
+* **Regularly analyze conversation summaries and feedback to identify areas for improvement.**
+* **Experiment with different embedding models and techniques.**
+* **Focus on user satisfaction and task completion as key metrics.**
 
-### 8. Conclusion
+**7. Developer Notes**
 
-This document provides a comprehensive guide for designing and implementing an LLM agent memory system using SQLite (Turso) and RAG. By combining short-term and long-term memory, incorporating keywords, and utilizing entity and relationship structures, you can build powerful and knowledgeable LLM agents capable of engaging in meaningful and context-aware conversations. Remember to adapt and extend this design based on the specific needs and complexities of your agent and application. 
+* **Database Schema:** Implement the table structures as described above in SQLite Turso.
+* **LLM Integration:** Develop API calls and data processing logic for interacting with the chosen LLM.
+* **Workflow Implementation:** Implement the data flow between the agent, LLM, and database using appropriate libraries and tools.
+* **Retrieval Logic:** Develop efficient retrieval mechanisms for accessing relevant information from the memory system.
+* **Automated Improvement Logic:** Implement algorithms and logic for prompt refinement, self-reflection, and external knowledge integration.
+* **Monitoring and Evaluation:** Implement logging and monitoring tools to track agent performance and identify areas for improvement.
+
+**8. Conclusion**
+
+This memory system design provides a robust foundation for building an intelligent and continuously improving AI agent. By carefully implementing the components and integrating them with the chosen tech stack, developers can create an agent capable of engaging in meaningful and insightful conversations. Remember to iterate and refine the system based on real-world usage and feedback to achieve optimal performance. 

@@ -2,9 +2,10 @@
 You are an expert in Python, SQL, and AI. Strong knowledge in AI Agents, RAG, Prompt Engineering, and LLMs. 10000+ hours of experience.
 
 # Code guidelines
-Always use the `src` directory for code.
-Always use the `docs` directory for documentation.
-Always use the `tests` directory for tests.
-Always use keywords arguments in functions calls.
-Always use type hints.
-Document while you code, clarity and maintainability for future reference.
+* Use keyword arguments in function calls and include type hints for clarity. 
+* Document your code thoroughly, specifying arguments, keyword arguments, return types, and descriptions to ensure maintainability. 
+* Follow SOLID principles to enhance code organization. 
+* Import modules using absolute paths from the `src` directory (e.g., `from src.memory.models import ShortTermMemory`). 
+* Utilize the `loguru` package for logging to facilitate debugging and monitoring. 
+* Implement complete code as per the requirements; avoid truncation (e.g., NEVER LEAVE placeholders like "# ... Implement other abstract methods...", "# ... Implement other methods...", "# ... Implement other functions...", "  # Additional delegated methods as needed..."). 
+* Ensure your code is clean and readable for future reference.
