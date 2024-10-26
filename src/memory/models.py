@@ -13,6 +13,14 @@ class MessageType(str, Enum):
 
 
 class ShortTermMemory(BaseModel):
+    user_info: str
+    last_conversation_summary: str
+    recent_goal_and_status: str
+    important_context: str
+    agent_beliefs: str  # Store the agent's current beliefs about the world and the user's intentions.
+
+
+class ConversationMemory(BaseModel):
     conversation_id: int
     turn_id: int
     timestamp: datetime
@@ -42,7 +50,7 @@ class ConversationSummary(BaseModel):
     feedback_text: Optional[str]
     example: Optional[str]
     improvement_suggestion: Optional[str]
-    prompt_version: str
+    improve_prompt: str
     reward_score: float
     conversation_summary: str
     timestamp: datetime

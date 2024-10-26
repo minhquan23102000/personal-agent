@@ -4,11 +4,12 @@ from datetime import datetime
 import numpy as np
 
 from src.memory.models import (
-    ShortTermMemory,
+    ConversationMemory,
     Knowledge,
     EntityRelationship,
     ConversationSummary,
     MessageType,
+    ShortTermMemory,
 )
 
 
@@ -46,6 +47,23 @@ class BaseDatabase(ABC):
         """Close database connection"""
         pass
 
+    @abstractmethod
+    async def store_short_term_memory(
+        self,
+        user_info: str,
+        last_conversation_summary: str,
+        recent_goal_and_status: str,
+        important_context: str,
+        agent_beliefs: str,
+    ) -> ShortTermMemory:
+        """Store short-term memory state"""
+        pass
+
+    @abstractmethod
+    async def get_short_term_memory(self) -> Optional[ShortTermMemory]:
+        """Retrieve current short-term memory state"""
+        pass
+
     # Abstract Storage Operations
     @abstractmethod
     async def store_conversation(
@@ -54,7 +72,7 @@ class BaseDatabase(ABC):
         message_content: str,
         message_type: MessageType,
         conversation_id: Optional[int] = None,
-    ) -> ShortTermMemory:
+    ) -> ConversationMemory:
         """Store conversation in database"""
         pass
 
@@ -85,7 +103,7 @@ class BaseDatabase(ABC):
         conversation_id: int,
         prompt: str,
         conversation_summary: str,
-        prompt_version: str,
+        improve_prompt: str,
         reward_score: float,
         feedback_text: Optional[str] = None,
         example: Optional[str] = None,
@@ -98,7 +116,7 @@ class BaseDatabase(ABC):
     @abstractmethod
     async def get_conversation_context(
         self, conversation_id: int, limit: int = 10
-    ) -> List[ShortTermMemory]:
+    ) -> List[ConversationMemory]:
         """Retrieve conversation context"""
         pass
 

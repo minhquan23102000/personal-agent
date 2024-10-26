@@ -5,11 +5,12 @@ import numpy as np
 from loguru import logger
 
 from src.memory.models import (
-    ShortTermMemory,
+    ConversationMemory,
     Knowledge,
     EntityRelationship,
     ConversationSummary,
     MessageType,
+    ShortTermMemory,
 )
 from src.memory.database.base import BaseDatabase
 from src.memory.embeddings.base import BaseEmbedding
@@ -52,7 +53,7 @@ class MemoryManager:
         message_content: str,
         message_type: MessageType,
         conversation_id: Optional[int] = None,
-    ) -> ShortTermMemory:
+    ) -> ConversationMemory:
         """Store a conversation turn in short-term memory"""
         try:
             return await self.db.store_conversation(
@@ -132,7 +133,7 @@ class MemoryManager:
         conversation_id: int,
         prompt: str,
         conversation_summary: str,
-        prompt_version: str,
+        improve_prompt: str,
         reward_score: float,
         feedback_text: Optional[str] = None,
         example: Optional[str] = None,
@@ -144,7 +145,7 @@ class MemoryManager:
                 conversation_id=conversation_id,
                 prompt=prompt,
                 conversation_summary=conversation_summary,
-                prompt_version=prompt_version,
+                improve_prompt=improve_prompt,
                 reward_score=reward_score,
                 feedback_text=feedback_text,
                 example=example,
@@ -353,4 +354,48 @@ class MemoryManager:
 
         except Exception as e:
             logger.error(f"Error in query_entities: {str(e)}")
+            raise
+
+    async def store_short_term_memory(
+        self,
+        user_info: str,
+        last_conversation_summary: str,
+        recent_goal_and_status: str,
+        important_context: str,
+        agent_beliefs: str,
+    ) -> ShortTermMemory:
+        """Store short-term memory state
+    
+        Args:
+            user_info: Current user information
+            last_conversation_summary: Summary of the last conversation
+            recent_goal_and_status: Current conversation goal
+            important_context: Important contextual information
+            agent_beliefs: Agent's current beliefs
+        
+        Returns:
+            ShortTermMemory: The stored memory state
+        """
+        try:
+            return await self.db.store_short_term_memory(
+                user_info=user_info,
+                last_conversation_summary=last_conversation_summary, 
+                recent_goal_and_status=recent_goal_and_status,
+                important_context=important_context,
+                agent_beliefs=agent_beliefs,
+            )
+        except Exception as e:
+            logger.error(f"Error storing short-term memory: {str(e)}")
+            raise
+
+    async def get_short_term_memory(self) -> Optional[ShortTermMemory]:
+        """Retrieve the current short-term memory state
+    
+        Returns:
+            Optional[ShortTermMemory]: The current memory state if it exists
+        """
+        try:
+            return await self.db.get_short_term_memory()
+        except Exception as e:
+            logger.error(f"Error retrieving short-term memory: {str(e)}")
             raise

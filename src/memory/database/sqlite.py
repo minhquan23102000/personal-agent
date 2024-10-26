@@ -10,11 +10,12 @@ from loguru import logger
 
 from src.memory.database.base import BaseDatabase
 from src.memory.models import (
-    ShortTermMemory,
+    ConversationMemory,
     Knowledge,
     EntityRelationship,
     ConversationSummary,
     MessageType,
+    ShortTermMemory,
 )
 
 
@@ -62,6 +63,21 @@ class SQLiteDatabase(BaseDatabase):
     async def initialize(self) -> None:
         """Initialize database schema"""
         async with self.get_connection() as conn:
+            # Add short term memory state table
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS short_term_memory_state (
+                    id INTEGER PRIMARY KEY,
+                    user_info TEXT NOT NULL,
+                    last_conversation_summary TEXT NOT NULL,
+                    recent_goal_and_status TEXT NOT NULL,
+                    important_context TEXT NOT NULL,
+                    agent_beliefs TEXT NOT NULL,
+                    timestamp DATETIME NOT NULL
+                )
+                """
+            )
+
             # Create short term memory table
             conn.execute(
                 """
@@ -129,7 +145,7 @@ class SQLiteDatabase(BaseDatabase):
                     feedback_text TEXT,
                     example TEXT,
                     improvement_suggestion TEXT,
-                    prompt_version TEXT NOT NULL,
+                    improve_prompt TEXT NOT NULL,
                     reward_score REAL NOT NULL,
                     conversation_summary TEXT NOT NULL,
                     timestamp DATETIME NOT NULL,
@@ -146,7 +162,7 @@ class SQLiteDatabase(BaseDatabase):
         message_content: str,
         message_type: MessageType,
         conversation_id: Optional[int] = None,
-    ) -> ShortTermMemory:
+    ) -> ConversationMemory:
         """SQLite implementation of conversation storage"""
         async with self.get_connection() as conn:
             if conversation_id is None:
@@ -184,7 +200,7 @@ class SQLiteDatabase(BaseDatabase):
 
             conn.commit()
 
-            return ShortTermMemory(
+            return ConversationMemory(
                 conversation_id=conversation_id,
                 turn_id=turn_id,
                 timestamp=datetime.now(UTC),
@@ -274,7 +290,7 @@ class SQLiteDatabase(BaseDatabase):
 
     async def get_conversation_context(
         self, conversation_id: int, limit: int = 10
-    ) -> List[ShortTermMemory]:
+    ) -> List[ConversationMemory]:
         """Retrieve conversation context"""
         async with self.get_connection() as conn:
             cursor = conn.execute(
@@ -290,7 +306,7 @@ class SQLiteDatabase(BaseDatabase):
 
             rows = cursor.fetchall()
             return [
-                ShortTermMemory(
+                ConversationMemory(
                     conversation_id=row[0],
                     turn_id=row[1],
                     timestamp=datetime.fromisoformat(row[2]),
@@ -368,7 +384,7 @@ class SQLiteDatabase(BaseDatabase):
         conversation_id: int,
         prompt: str,
         conversation_summary: str,
-        prompt_version: str,
+        improve_prompt: str,
         reward_score: float,
         feedback_text: Optional[str] = None,
         example: Optional[str] = None,
@@ -380,7 +396,7 @@ class SQLiteDatabase(BaseDatabase):
                 """
                 INSERT INTO conversation_summary (
                     conversation_id, prompt, feedback_text, example,
-                    improvement_suggestion, prompt_version, reward_score,
+                    improvement_suggestion, improve_prompt, reward_score,
                     conversation_summary, timestamp
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -391,7 +407,7 @@ class SQLiteDatabase(BaseDatabase):
                     feedback_text,
                     example,
                     improvement_suggestion,
-                    prompt_version,
+                    improve_prompt,
                     reward_score,
                     conversation_summary,
                     datetime.now(UTC),
@@ -406,7 +422,7 @@ class SQLiteDatabase(BaseDatabase):
                 feedback_text=feedback_text,
                 example=example,
                 improvement_suggestion=improvement_suggestion,
-                prompt_version=prompt_version,
+                improve_prompt=improve_prompt,
                 reward_score=reward_score,
                 conversation_summary=conversation_summary,
                 timestamp=datetime.now(UTC),
@@ -435,7 +451,7 @@ class SQLiteDatabase(BaseDatabase):
                 feedback_text=row[2],
                 example=row[3],
                 improvement_suggestion=row[4],
-                prompt_version=row[5],
+                improve_prompt=row[5],
                 reward_score=row[6],
                 conversation_summary=row[7],
                 timestamp=datetime.fromisoformat(row[8]),
@@ -482,7 +498,7 @@ class SQLiteDatabase(BaseDatabase):
                 feedback_text=row[2],
                 example=row[3],
                 improvement_suggestion=row[4],
-                prompt_version=row[5],
+                improve_prompt=row[5],
                 reward_score=row[6],
                 conversation_summary=row[7],
                 timestamp=datetime.fromisoformat(row[8]),
@@ -510,7 +526,7 @@ class SQLiteDatabase(BaseDatabase):
                     feedback_text=row[2],
                     example=row[3],
                     improvement_suggestion=row[4],
-                    prompt_version=row[5],
+                    improve_prompt=row[5],
                     reward_score=row[6],
                     conversation_summary=row[7],
                     timestamp=datetime.fromisoformat(row[8]),
@@ -521,3 +537,69 @@ class SQLiteDatabase(BaseDatabase):
     async def close(self) -> None:
         """No persistent connection to close in SQLite"""
         pass
+
+    async def store_short_term_memory(
+        self,
+        user_info: str,
+        last_conversation_summary: str,
+        recent_goal_and_status: str,
+        important_context: str,
+        agent_beliefs: str,
+    ) -> ShortTermMemory:
+        """Store short-term memory state"""
+        async with self.get_connection() as conn:
+            # First clear any existing state since we only keep current state
+            conn.execute("DELETE FROM short_term_memory_state")
+
+            cursor = conn.execute(
+                """
+                INSERT INTO short_term_memory_state (
+                    user_info, last_conversation_summary, recent_goal_and_status,
+                    important_context, agent_beliefs, timestamp
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user_info,
+                    last_conversation_summary,
+                    recent_goal_and_status,
+                    important_context,
+                    agent_beliefs,
+                    datetime.now(UTC),
+                ),
+            )
+
+            conn.commit()
+
+            return ShortTermMemory(
+                user_info=user_info,
+                last_conversation_summary=last_conversation_summary,
+                recent_goal_and_status=recent_goal_and_status,
+                important_context=important_context,
+                agent_beliefs=agent_beliefs,
+            )
+
+    async def get_short_term_memory(self) -> Optional[ShortTermMemory]:
+        """Retrieve current short-term memory state"""
+        async with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT user_info, last_conversation_summary, recent_goal_and_status,
+                       important_context, agent_beliefs
+                FROM short_term_memory_state
+                ORDER BY timestamp DESC
+                LIMIT 1
+                """
+            )
+
+            row = cursor.fetchone()
+            if not row:
+                return None
+
+            return ShortTermMemory(
+                user_info=row[0],
+                last_conversation_summary=row[1],
+                recent_goal_and_status=row[2],
+                important_context=row[3],
+                agent_beliefs=row[4],
+            )

@@ -2,7 +2,6 @@
 
 Package path (put all the implementation in this package): `src.memory`
 
-PLEASE USE SQLITE VEC INSTEAD OF SQLITE-TURSO. because sqlite-turso does not support for python development now.
 
 
 Next Phase Implementation Plan:
@@ -19,7 +18,21 @@ This document outlines the design of a memory system for an AI agent, enabling i
 
 The memory system consists of four interconnected tables:
 
-**2.1 Short-Term Memory**
+**2.0 Short Term Memory**
+
+* **Purpose:** Stores the agent's short-term memory, including user information, last conversation summary, current goal, important context, and agent beliefs.
+* **Storage:** SQLite Turso
+* **Structure:**
+    * `user_info`: Current user information (TEXT)
+    * `last_conversation_summary`: Summary of the last conversation (TEXT)
+    * `recent_goal_and_status`: Recent user goals and their status (TEXT)
+    * `important_context`: Important contextual information (TEXT)
+    * `agent_beliefs`: Agent's current beliefs about the world and the user's intentions (TEXT)
+* **Considerations:**
+    * This will be updated after each conversation.
+
+
+**2.1 Conversation Store**
 
 * **Purpose:** Stores detailed conversation data, including text, media, and files.
 * **Storage:** SQLite Turso
@@ -72,7 +85,7 @@ The memory system consists of four interconnected tables:
     * `feedback_text`: Detailed feedback on the conversation (TEXT)
     * `example`: Example of desired agent behavior (TEXT)
     * `improvement_suggestion`: LLM-generated suggestion (TEXT)
-    * `prompt_version`: Identifier for the prompt version used (TEXT)
+    * `improve_prompt`: Identifier for the prompt version used (TEXT)
     * `reward_score`: Overall quality score for the conversation (REAL)
     * `conversation_summary`: Summary of the conversation (TEXT)
     * `timestamp`: Timestamp of the conversation (DATETIME)

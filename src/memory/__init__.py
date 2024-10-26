@@ -3,7 +3,7 @@ from src.memory.database.sqlite import SQLiteDatabase
 from src.memory.memory_manager import MemoryManager
 from src.memory.models import (
     MessageType,
-    ShortTermMemory,
+    ConversationMemory,
     Knowledge,
     EntityRelationship,
     ConversationSummary,
@@ -14,7 +14,7 @@ __all__ = [
     "SQLiteDatabase",
     "MemoryManager",
     "MessageType",
-    "ShortTermMemory",
+    "ConversationMemory",
     "Knowledge",
     "EntityRelationship",
     "ConversationSummary",
