@@ -19,8 +19,6 @@ from src.memory.retrieval.reranker import CrossEncoderReranker
 T = TypeVar("T")
 
 
-
-
 class MemoryManager:
     def __init__(
         self,
@@ -331,7 +329,7 @@ class MemoryManager:
             # First stage: Similarity search for related knowledge
             related_knowledge = await self.db.search_similar_knowledge(
                 query_embedding=entities_embedding,
-                vector_column="entity_embeddings"
+                vector_column="entity_embeddings",  # Added missing comma
                 limit=limit * 2,
             )
 
@@ -363,26 +361,28 @@ class MemoryManager:
         recent_goal_and_status: str,
         important_context: str,
         agent_beliefs: str,
+        agent_info: str,
     ) -> ShortTermMemory:
         """Store short-term memory state
-    
+
         Args:
             user_info: Current user information
             last_conversation_summary: Summary of the last conversation
             recent_goal_and_status: Current conversation goal
             important_context: Important contextual information
             agent_beliefs: Agent's current beliefs
-        
+            agent_info: Agent's basic information
         Returns:
             ShortTermMemory: The stored memory state
         """
         try:
             return await self.db.store_short_term_memory(
                 user_info=user_info,
-                last_conversation_summary=last_conversation_summary, 
+                last_conversation_summary=last_conversation_summary,
                 recent_goal_and_status=recent_goal_and_status,
                 important_context=important_context,
                 agent_beliefs=agent_beliefs,
+                agent_info=agent_info,
             )
         except Exception as e:
             logger.error(f"Error storing short-term memory: {str(e)}")
@@ -390,7 +390,7 @@ class MemoryManager:
 
     async def get_short_term_memory(self) -> Optional[ShortTermMemory]:
         """Retrieve the current short-term memory state
-    
+
         Returns:
             Optional[ShortTermMemory]: The current memory state if it exists
         """

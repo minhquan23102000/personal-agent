@@ -9,6 +9,7 @@ dependencies = [
     "loguru>=0.7.2",
     "mirascope[litellm]>=1.6.0",
     "numpy>=2.1.2",
+    "rich>=13.9.3",
     "sentence-transformers>=3.2.1",
     "sqlite-vec>=0.1.3",
 ]

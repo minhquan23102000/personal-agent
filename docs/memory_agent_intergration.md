@@ -1,5 +1,7 @@
 # Agent-Memory Integration
 
+Note: every agent will have a separate memory.
+
 ## 1. Dynamic Tools (Used during conversation)
 
 **1.1 Knowledge Storage:**
@@ -76,3 +78,160 @@
 
 * **Storage Errors:** Implement mechanisms to handle potential errors during storage operations (e.g., database connection errors, write failures). This may involve retrying the operation, logging the error, or notifying the user.
 * **Retrieval Errors:** Implement mechanisms to handle potential errors during retrieval operations (e.g., database connection errors, invalid queries). This may involve returning a default value, logging the error, or notifying the user.
+
+
+# Implementation Plan
+
+
+# Memory Integration Plan for Base Agent
+
+## 1. Extend BaseAgent Class
+
+### A. Add Memory Manager
+```python:src/agent/base_agent.py
+class BaseAgent(ABC):
+    memory_manager: MemoryManager
+    conversation_id: Optional[int] = None
+    agent_id: str  # Unique identifier for the agent
+```
+
+### B. Initialize Memory Components
+- Add memory manager initialization in post_init method
+- Set up initial short-term memory state
+- Load best performing system prompt from memory
+
+## 2. Memory Integration Points
+
+### A. Conversation Start
+1. Load best system prompt:
+   - Query memory for highest reward score prompt
+   - Update system_prompt attribute if exists
+   
+2. Load short-term memory:
+   - Get latest short-term memory state
+   - Integrate into system prompt building and update agent's context if exists
+
+### B. During Conversation
+1. Store each message:
+   - Track conversation using conversation_id
+   - Store both user and agent messages
+   - Reference existing store_conversation method and reference document: ([2](https://mirascope.com/docs/learn/agents/)) 
+
+2. Knowledge Management:
+   - Add knowledge storage tool
+   - Add knowledge search tool
+   - Add entity relationship tools
+
+### C. Conversation End
+1. Store conversation summary:
+   - Generate conversation summary
+   - Perform self-reflection
+   - Calculate reward score
+   - Store improved prompt
+
+2. Update short-term memory:
+   - Update user information
+   - Store recent goals and status
+   - Update agent beliefs
+   - Store important context
+
+## 3. New Abstract Methods
+
+```python
+class BaseAgent(ABC):
+    @abstractmethod
+    async def generate_conversation_summary(self) -> str:
+        """Generate summary of the current conversation"""
+        pass
+    
+    @abstractmethod
+    async def perform_self_reflection(self) -> Tuple[float, str, str]:
+        """Return (reward_score, feedback, improved_prompt)"""
+        pass
+    
+    @abstractmethod
+    async def update_short_term_memory(self) -> None:
+        """Update agent's short-term memory state"""
+        pass
+```
+
+## 4. Enhanced Tool System
+
+### A. Memory-Aware Tools
+Add new base tools for memory operations:
+```python
+class KnowledgeStorageTool(BaseTool):
+    """Store new knowledge in long-term memory."""
+    text: str
+    entities: List[str]
+    keywords: List[str]
+    relationship_text: List[str] # e.g. "Paris is the capital of France"
+
+class KnowledgeSearchTool(BaseTool):
+    """Search knowledge base"""
+    query: str
+
+class EntityRelationshipTool(BaseTool):
+    """Search entity relationships"""
+    entities: List[str]
+```
+
+### B. Tool Integration
+Modify the existing tool handling system([2](https://mirascope.com/docs/learn/agents/)) to:
+- Pass memory_manager to tools
+- Track tool usage in conversation history
+- Store tool outputs in knowledge base when relevant
+```python
+    def get_tools(self) -> List[Type[BaseTool]]:
+        return [
+            KnowledgeStorageTool(),
+            KnowledgeSearchTool(),
+            EntityRelationshipTool(),
+        ]
+```
+
+## 5. Enhanced Prompt Building
+
+Modify build_prompt method to incorporate:
+- Short-term memory context
+- Relevant knowledge from long-term memory
+- Recent conversation history
+- Current goals and status
+
+## 6. Error Handling
+
+Add memory-specific error handling:
+- Database connection errors
+- Embedding generation failures
+- Storage/retrieval retries
+- Fallback mechanisms
+- Error as returning value for the agent. Because agent can't see the error log.
+
+## 7. Async Support
+
+Ensure all memory operations support async:
+- Memory storage operations
+- Knowledge retrieval
+- Tool execution
+- Summary generation
+
+## 8. Configuration System
+
+Add memory-specific configuration:
+- Vector similarity thresholds
+- Maximum history length
+- Storage retention policies
+- Embedding model settings
+
+## Implementation Notes
+
+1. The integration should maintain backward compatibility with existing agent implementations.
+2. Memory operations should be non-blocking where possible.
+3. Use dependency injection for memory components to allow different implementations.
+4. Implement proper cleanup and resource management.
+5. Add comprehensive logging for memory operations.
+6. Consider implementing memory operation batching for performance.
+7. Add memory state validation mechanisms.
+8. Implement memory migration strategies for updates.
+
+This plan provides a framework for integrating the memory system while maintaining the flexibility and extensibility of the base agent system. The actual implementation should be done incrementally, with thorough testing at each stage.

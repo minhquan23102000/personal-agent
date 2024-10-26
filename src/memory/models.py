@@ -10,6 +10,7 @@ class MessageType(str, Enum):
     AUDIO = "audio"
     VIDEO = "video"
     FILE = "file"
+    TOOL = "tool"
 
 
 class ShortTermMemory(BaseModel):
@@ -18,6 +19,9 @@ class ShortTermMemory(BaseModel):
     recent_goal_and_status: str
     important_context: str
     agent_beliefs: str  # Store the agent's current beliefs about the world and the user's intentions.
+    agent_info: (
+        str  # Store the agent's basic information (name, role, personality, etc)
+    )
 
 
 class ConversationMemory(BaseModel):

@@ -73,6 +73,7 @@ class SQLiteDatabase(BaseDatabase):
                     recent_goal_and_status TEXT NOT NULL,
                     important_context TEXT NOT NULL,
                     agent_beliefs TEXT NOT NULL,
+                    agent_info TEXT NOT NULL,
                     timestamp DATETIME NOT NULL
                 )
                 """
@@ -545,6 +546,7 @@ class SQLiteDatabase(BaseDatabase):
         recent_goal_and_status: str,
         important_context: str,
         agent_beliefs: str,
+        agent_info: str,
     ) -> ShortTermMemory:
         """Store short-term memory state"""
         async with self.get_connection() as conn:
@@ -555,9 +557,9 @@ class SQLiteDatabase(BaseDatabase):
                 """
                 INSERT INTO short_term_memory_state (
                     user_info, last_conversation_summary, recent_goal_and_status,
-                    important_context, agent_beliefs, timestamp
+                    important_context, agent_beliefs, agent_info, timestamp
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ? )
                 """,
                 (
                     user_info,
@@ -565,6 +567,7 @@ class SQLiteDatabase(BaseDatabase):
                     recent_goal_and_status,
                     important_context,
                     agent_beliefs,
+                    agent_info,
                     datetime.now(UTC),
                 ),
             )
@@ -577,6 +580,7 @@ class SQLiteDatabase(BaseDatabase):
                 recent_goal_and_status=recent_goal_and_status,
                 important_context=important_context,
                 agent_beliefs=agent_beliefs,
+                agent_info=agent_info,
             )
 
     async def get_short_term_memory(self) -> Optional[ShortTermMemory]:
@@ -585,7 +589,7 @@ class SQLiteDatabase(BaseDatabase):
             cursor = conn.execute(
                 """
                 SELECT user_info, last_conversation_summary, recent_goal_and_status,
-                       important_context, agent_beliefs
+                       important_context, agent_beliefs, agent_info
                 FROM short_term_memory_state
                 ORDER BY timestamp DESC
                 LIMIT 1
@@ -602,4 +606,5 @@ class SQLiteDatabase(BaseDatabase):
                 recent_goal_and_status=row[2],
                 important_context=row[3],
                 agent_beliefs=row[4],
+                agent_info=row[5],
             )
