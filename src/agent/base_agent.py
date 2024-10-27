@@ -202,7 +202,7 @@ class BaseAgent:
         if self.memory_manager:
             for msg in messages:
                 await self.memory_manager.store_conversation(
-                    sender=msg.role,
+                    sender="Tool",
                     message_content=str(msg),
                     message_type=MessageType.TOOL,
                     conversation_id=self.conversation_id,

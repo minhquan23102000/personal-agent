@@ -59,10 +59,10 @@ User: exit
 
 async def main():
     agent = Eva()
-    # await    agent.run()
-    agent.history = [history_sample]
-    summary = await generate_conversation_summary(agent)
-    print(summary)
+    await agent.run()
+    # agent.history = [history_sample]
+    # summary = await generate_conversation_summary(agent)
+    # print(summary)
 
 
 if __name__ == "__main__":
