@@ -25,7 +25,7 @@ class ShortTermMemory(BaseModel):
 
 
 class ConversationMemory(BaseModel):
-    conversation_id: int
+    conversation_id: str
     turn_id: int
     timestamp: datetime
     sender: str
@@ -49,7 +49,7 @@ class EntityRelationship(BaseModel):
 
 
 class ConversationSummary(BaseModel):
-    conversation_id: int
+    conversation_id: str
     prompt: str
     feedback_text: Optional[str]
     example: Optional[str]

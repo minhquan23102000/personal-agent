@@ -17,16 +17,25 @@ from src.memory.models import (
     MessageType,
     ShortTermMemory,
 )
+import asyncio
+import re
 
 
 class SQLiteDatabase(BaseDatabase):
-    def __init__(self, db_path: str = "memory.db", embedding_size: int = 364):
-        super().__init__({"db_path": db_path, "embedding_size": embedding_size})
+    def __init__(self, db_name: str = "memory", embedding_size: int = 364):
+        db_name = re.sub(
+            r"[^\w]", "_", db_name
+        )  # Replace all non-word characters with underscores
+        # remove leading and trailing underscores
+        db_name = re.sub(r"_{2,}", "_", db_name)
+        db_name = db_name.strip("_")
+
+        super().__init__({"db_name": f"{db_name}.db", "embedding_size": embedding_size})
 
     def _validate_config(self) -> None:
-        db_path = self.connection_config["db_path"]
-        if not isinstance(db_path, str):
-            raise ValueError("db_path must be a string")
+        db_name = self.connection_config["db_name"]
+        if not isinstance(db_name, str):
+            raise ValueError("db_name must be a string")
 
         embedding_size = self.connection_config["embedding_size"]
         if not isinstance(embedding_size, int) or embedding_size <= 0:
@@ -35,10 +44,10 @@ class SQLiteDatabase(BaseDatabase):
     def _setup_connection(self) -> None:
         """Initialize SQLite and load vector extension"""
         try:
-            db_path = self.connection_config["db_path"]
-            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+            db_name = self.connection_config["db_name"]
+            Path(db_name).parent.mkdir(parents=True, exist_ok=True)
 
-            with sqlite3.connect(db_path) as conn:
+            with sqlite3.connect(db_name) as conn:
                 conn.enable_load_extension(True)
                 sqlite_vec.load(conn)
                 conn.enable_load_extension(False)
@@ -46,12 +55,14 @@ class SQLiteDatabase(BaseDatabase):
                 # Verify installation
                 (vec_version,) = conn.execute("select vec_version()").fetchone()
                 logger.info(f"sqlite-vec version: {vec_version}")
+
+            asyncio.run(self.initialize())
         except Exception as e:
             raise RuntimeError(f"Failed to initialize SQLite database: {str(e)}")
 
     @asynccontextmanager
     async def get_connection(self) -> AsyncGenerator[sqlite3.Connection, None]:
-        conn = sqlite3.connect(self.connection_config["db_path"])
+        conn = sqlite3.connect(self.connection_config["db_name"])
         try:
             conn.enable_load_extension(True)
             sqlite_vec.load(conn)
@@ -82,13 +93,14 @@ class SQLiteDatabase(BaseDatabase):
             # Create short term memory table
             conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS short_term_memory (
-                    conversation_id INTEGER PRIMARY KEY,
+                CREATE TABLE IF NOT EXISTS conversations (
+                    conversation_id TEXT,
                     turn_id INTEGER NOT NULL,
                     timestamp DATETIME NOT NULL,
                     sender TEXT NOT NULL,
                     message_content TEXT NOT NULL,
-                    message_type TEXT NOT NULL
+                    message_type TEXT NOT NULL,
+                    PRIMARY KEY (conversation_id, turn_id)
                 )
             """
             )
@@ -107,15 +119,15 @@ class SQLiteDatabase(BaseDatabase):
             """
             )
 
-            # Create vector index for knowledge
-            conn.execute(
-                f"""
-                CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_vec USING vec0(
-                    text_embedding({self.connection_config['embedding_size']})
-                )
-                
-            """
-            )
+            # # Create vector index for knowledge
+            # conn.execute(
+            #     f"""
+            #     CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_vec USING vec0(
+            #         text_embedding({self.connection_config['embedding_size']})
+            #     )
+
+            # """
+            # )
 
             # Create entities table
             conn.execute(
@@ -128,14 +140,14 @@ class SQLiteDatabase(BaseDatabase):
             """
             )
 
-            # Create vector index for entities
-            conn.execute(
-                f"""
-                CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec USING vec0(
-                    embedding({self.connection_config['embedding_size']})
-                )
-            """
-            )
+            # # Create vector index for entities
+            # conn.execute(
+            #     f"""
+            #     CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec USING vec0(
+            #         embedding({self.connection_config['embedding_size']})
+            #     )
+            # """
+            # )
 
             # Create conversation summary table
             conn.execute(
@@ -162,42 +174,31 @@ class SQLiteDatabase(BaseDatabase):
         sender: str,
         message_content: str,
         message_type: MessageType,
-        conversation_id: Optional[int] = None,
+        conversation_id: str,
     ) -> ConversationMemory:
         """SQLite implementation of conversation storage"""
         async with self.get_connection() as conn:
-            if conversation_id is None:
-                cursor = conn.execute(
-                    """
-                    INSERT INTO short_term_memory (turn_id, timestamp, sender, message_content, message_type)
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (1, datetime.now(UTC), sender, message_content, message_type.value),
-                )
-                conversation_id = cursor.lastrowid or 0  # Ensure it's not None
-                turn_id = 1
-            else:
-                cursor = conn.execute(
-                    "SELECT MAX(turn_id) FROM short_term_memory WHERE conversation_id = ?",
-                    (conversation_id,),
-                )
-                max_turn = cursor.fetchone()
-                turn_id = (max_turn[0] or 0) + 1
+            cursor = conn.execute(
+                "SELECT MAX(turn_id) FROM conversations WHERE conversation_id = ?",
+                (conversation_id,),
+            )
+            max_turn = cursor.fetchone()
+            turn_id = (max_turn[0] or 0) + 1
 
-                conn.execute(
-                    """
-                    INSERT INTO short_term_memory (conversation_id, turn_id, timestamp, sender, message_content, message_type)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        conversation_id,
-                        turn_id,
-                        datetime.now(UTC),
-                        sender,
-                        message_content,
-                        message_type.value,
-                    ),
-                )
+            conn.execute(
+                """
+                INSERT INTO conversations (conversation_id, turn_id, timestamp, sender, message_content, message_type)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    conversation_id,
+                    turn_id,
+                    datetime.now(UTC),
+                    sender,
+                    message_content,
+                    message_type.value,
+                ),
+            )
 
             conn.commit()
 
@@ -241,10 +242,10 @@ class SQLiteDatabase(BaseDatabase):
             knowledge_id = cursor.lastrowid or 0
 
             # Add to vector index
-            conn.execute(
-                "INSERT INTO knowledge_vec(rowid, text_embedding) VALUES (?, ?)",
-                (knowledge_id, text_embedding_blob),
-            )
+            # conn.execute(
+            #     "INSERT INTO knowledge_vec(rowid, text_embedding) VALUES (?, ?)",
+            #     (knowledge_id, text_embedding_blob),
+            # )
 
             conn.commit()
 
@@ -276,10 +277,10 @@ class SQLiteDatabase(BaseDatabase):
             relationship_id = cursor.lastrowid or 0
 
             # Add to vector index
-            conn.execute(
-                "INSERT INTO entities_vec(rowid, embedding) VALUES (?, ?)",
-                (relationship_id, embedding_blob),
-            )
+            # conn.execute(
+            #     "INSERT INTO entities_vec(rowid, embedding) VALUES (?, ?)",
+            #     (relationship_id, embedding_blob),
+            # )
 
             conn.commit()
 
@@ -290,7 +291,7 @@ class SQLiteDatabase(BaseDatabase):
             )
 
     async def get_conversation_context(
-        self, conversation_id: int, limit: int = 10
+        self, conversation_id: str, limit: int = 10
     ) -> List[ConversationMemory]:
         """Retrieve conversation context"""
         async with self.get_connection() as conn:
@@ -331,9 +332,8 @@ class SQLiteDatabase(BaseDatabase):
             query_blob = sqlite_vec.serialize_float32(query_embedding.tolist())
             cursor = conn.execute(
                 f"""
-                SELECT k.*, vec_cosine_similarity(k_vec.{vector_column}, ?) as similarity
+                SELECT k.*, vec_cosine_similarity(k.{vector_column}, ?) as similarity
                 FROM knowledge k
-                JOIN knowledge_vec k_vec ON k.knowledge_id = k_vec.rowid
                 ORDER BY similarity DESC
                 LIMIT ?
                 """,
@@ -361,9 +361,8 @@ class SQLiteDatabase(BaseDatabase):
             query_blob = sqlite_vec.serialize_float32(query_embedding.tolist())
             cursor = conn.execute(
                 """
-                SELECT e.*, vec_cosine_similarity(e_vec.embedding, ?) as similarity
+                SELECT e.*, vec_cosine_similarity(e.embedding, ?) as similarity
                 FROM entities e
-                JOIN entities_vec e_vec ON e.relationship_id = e_vec.rowid
                 ORDER BY similarity DESC
                 LIMIT ?
                 """,
@@ -382,7 +381,7 @@ class SQLiteDatabase(BaseDatabase):
 
     async def store_conversation_summary(
         self,
-        conversation_id: int,
+        conversation_id: str,
         prompt: str,
         conversation_summary: str,
         improve_prompt: str,
@@ -430,7 +429,7 @@ class SQLiteDatabase(BaseDatabase):
             )
 
     async def get_conversation_summary(
-        self, conversation_id: int
+        self, conversation_id: str
     ) -> Optional[ConversationSummary]:
         """Get conversation summary"""
         async with self.get_connection() as conn:
@@ -460,7 +459,7 @@ class SQLiteDatabase(BaseDatabase):
 
     async def update_conversation_feedback(
         self,
-        conversation_id: int,
+        conversation_id: str,
         feedback_text: str,
         reward_score: float,
         improvement_suggestion: Optional[str] = None,

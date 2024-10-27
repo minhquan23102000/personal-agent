@@ -14,7 +14,7 @@ class SentenceTransformerEmbedding(BaseEmbedding):
         self,
         model_name: str = "all-MiniLM-L6-v2",
         embedding_size: int = 384,
-        cache_enabled: bool = True,
+        cache_enabled: bool = False,
         device: str | None = None,
     ):
         """Initialize SentenceTransformer embedding
@@ -34,9 +34,9 @@ class SentenceTransformerEmbedding(BaseEmbedding):
     def _validate_config(self) -> None:
         """Validate configuration"""
         if not isinstance(self.model_name, str):
-            raise ValueError("model_name must be a string")
-        if not isinstance(self.device, str):
-            raise ValueError("device must be a string")
+            raise ValueError(f"model_name must be a string, got {self.model_name}")
+        if not isinstance(self.device, str) and self.device is not None:
+            raise ValueError(f"device must be a string or None, got {self.device}")
 
     def _setup_model(self) -> None:
         """Setup SentenceTransformer model"""

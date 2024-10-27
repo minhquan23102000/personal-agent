@@ -28,6 +28,7 @@ The memory system consists of four interconnected tables:
     * `recent_goal_and_status`: Recent user goals and their status (TEXT)
     * `important_context`: Important contextual information (TEXT)
     * `agent_beliefs`: Agent's current beliefs about the world and the user's intentions (TEXT)
+    * `agent_info`: Agent's current information (TEXT)
 * **Considerations:**
     * This will be updated after each conversation.
 

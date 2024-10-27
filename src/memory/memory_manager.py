@@ -15,6 +15,8 @@ from src.memory.models import (
 from src.memory.database.base import BaseDatabase
 from src.memory.embeddings.base import BaseEmbedding
 from src.memory.retrieval.reranker import CrossEncoderReranker
+from src.memory.database.sqlite import SQLiteDatabase
+from src.memory.embeddings.sentence_transformer import SentenceTransformerEmbedding
 
 T = TypeVar("T")
 
@@ -22,10 +24,12 @@ T = TypeVar("T")
 class MemoryManager:
     def __init__(
         self,
-        database: BaseDatabase,
-        embedding_model: BaseEmbedding,
+        db_name: str,
+        database: BaseDatabase | None = None,
+        embedding_model: BaseEmbedding | None = None,
         similarity_threshold: float = 0.7,
-        max_results: int = 5,
+        max_search_knowledge_results: int = 5,
+        max_search_entity_results: int = 10,
         use_reranker: bool = True,
     ):
         """Initialize MemoryManager
@@ -37,10 +41,21 @@ class MemoryManager:
             max_results (int): Maximum number of results to return
             use_reranker (bool): Whether to use cross-encoder reranking
         """
-        self.db = database
-        self.embedding_model = embedding_model
+        if embedding_model:
+            self.embedding_model = embedding_model
+        else:
+            self.embedding_model = SentenceTransformerEmbedding()
+
+        if database:
+            self.db = database
+        else:
+            self.db = SQLiteDatabase(
+                embedding_size=self.embedding_model.embedding_size, db_name=db_name
+            )
+
         self.similarity_threshold = similarity_threshold
-        self.max_results = max_results
+        self.max_search_knowledge_results = max_search_knowledge_results
+        self.max_search_entity_results = max_search_entity_results
         self.use_reranker = use_reranker
         if use_reranker:
             self.reranker = CrossEncoderReranker()
@@ -50,7 +65,7 @@ class MemoryManager:
         sender: str,
         message_content: str,
         message_type: MessageType,
-        conversation_id: Optional[int] = None,
+        conversation_id: str,
     ) -> ConversationMemory:
         """Store a conversation turn in short-term memory"""
         try:
@@ -94,6 +109,7 @@ class MemoryManager:
                 query_embedding=query_embedding,
                 limit=limit,
             )
+
         except Exception as e:
             logger.error(f"Error searching knowledge: {str(e)}")
             raise
@@ -114,7 +130,7 @@ class MemoryManager:
             raise
 
     async def search_similar_entities(
-        self, query_embedding: np.ndarray, limit: int = 5
+        self, query_embedding: np.ndarray, limit: int = 10
     ) -> List[EntityRelationship]:
         """Search for similar entity relationships using vector similarity"""
         try:
@@ -128,7 +144,7 @@ class MemoryManager:
 
     async def store_conversation_summary(
         self,
-        conversation_id: int,
+        conversation_id: str,
         prompt: str,
         conversation_summary: str,
         improve_prompt: str,
@@ -154,7 +170,7 @@ class MemoryManager:
             raise
 
     async def get_conversation_summary(
-        self, conversation_id: int
+        self, conversation_id: str
     ) -> Optional[ConversationSummary]:
         """Retrieve conversation summary by conversation ID"""
         try:
@@ -167,7 +183,7 @@ class MemoryManager:
 
     async def update_conversation_feedback(
         self,
-        conversation_id: int,
+        conversation_id: str,
         feedback_text: str,
         reward_score: float,
         improvement_suggestion: Optional[str] = None,
@@ -220,6 +236,7 @@ class MemoryManager:
         items: List[T],
         text_extractor: Callable[[T], str],
         limit: int,
+        threshold: float | None = None,
     ) -> List[T]:
         """Two-stage reranking: similarity search followed by cross-encoder
 
@@ -241,7 +258,7 @@ class MemoryManager:
             items=items,  # Initial scores don't matter for reranking
             text_extractor=text_extractor,
             top_k=limit,
-            threshold=self.similarity_threshold,
+            threshold=threshold or self.similarity_threshold,
         )
 
         return [item for item, _ in reranked_items]
@@ -249,7 +266,7 @@ class MemoryManager:
     async def query_knowledge(
         self,
         query: str,
-        limit: int = 5,
+        threshold: float | None = None,
     ) -> Tuple[List[Knowledge], List[EntityRelationship]]:
         """Query knowledge and related entities based on text query"""
         try:
@@ -259,7 +276,7 @@ class MemoryManager:
             # First stage: Similarity search for knowledge
             knowledge_entries = await self.db.search_similar_knowledge(
                 query_embedding=query_embedding,
-                limit=limit * 2,  # Get more for reranking
+                limit=self.max_search_knowledge_results,  # Get more for reranking
             )
 
             if not knowledge_entries:
@@ -278,7 +295,7 @@ class MemoryManager:
             # First stage: Similarity search for entity relationships in a single query
             entity_relationships = await self.db.search_similar_entities(
                 query_embedding=all_entities_embedding,
-                limit=limit,
+                limit=self.max_search_entity_results,
             )
 
             # Second stage: Rerank both result sets
@@ -286,14 +303,16 @@ class MemoryManager:
                 query=query,
                 items=knowledge_entries,
                 text_extractor=lambda x: x.text,
-                limit=limit,
+                limit=self.max_search_knowledge_results,
+                threshold=threshold,
             )
 
             reranked_relationships = await self._rerank_results(
                 query=query,
                 items=entity_relationships,
                 text_extractor=lambda x: x.relationship_text,
-                limit=limit,
+                limit=self.max_search_entity_results,
+                threshold=threshold,
             )
 
             return reranked_knowledge, reranked_relationships
@@ -305,7 +324,7 @@ class MemoryManager:
     async def query_entities(
         self,
         query: str,
-        limit: int = 5,
+        threshold: float | None = None,
     ) -> Tuple[List[EntityRelationship], List[Knowledge]]:
         """Query entities and related knowledge based on entity query"""
         try:
@@ -314,7 +333,7 @@ class MemoryManager:
             # First stage: Similarity search for entities
             entity_relationships = await self.db.search_similar_entities(
                 query_embedding=query_embedding,
-                limit=limit * 2,
+                limit=self.max_search_entity_results,
             )
 
             if not entity_relationships:
@@ -330,7 +349,7 @@ class MemoryManager:
             related_knowledge = await self.db.search_similar_knowledge(
                 query_embedding=entities_embedding,
                 vector_column="entity_embeddings",  # Added missing comma
-                limit=limit * 2,
+                limit=self.max_search_knowledge_results,
             )
 
             # Second stage: Rerank both results
@@ -338,14 +357,16 @@ class MemoryManager:
                 query=query,
                 items=entity_relationships,
                 text_extractor=lambda x: x.relationship_text,
-                limit=limit,
+                limit=self.max_search_entity_results,
+                threshold=threshold,
             )
 
             reranked_knowledge = await self._rerank_results(
                 query=query,
                 items=related_knowledge,
                 text_extractor=lambda x: x.text,
-                limit=limit,
+                limit=self.max_search_knowledge_results,
+                threshold=threshold,
             )
 
             return reranked_relationships, reranked_knowledge

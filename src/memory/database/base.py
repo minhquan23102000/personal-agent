@@ -16,6 +16,8 @@ from src.memory.models import (
 class BaseDatabase(ABC):
     """Abstract base class for database implementations"""
 
+    db_name: str
+
     def __init__(self, connection_config: dict):
         """Initialize database with connection configuration"""
         self.connection_config = connection_config
@@ -72,7 +74,7 @@ class BaseDatabase(ABC):
         sender: str,
         message_content: str,
         message_type: MessageType,
-        conversation_id: Optional[int] = None,
+        conversation_id: str,
     ) -> ConversationMemory:
         """Store conversation in database"""
         pass
@@ -101,7 +103,7 @@ class BaseDatabase(ABC):
     @abstractmethod
     async def store_conversation_summary(
         self,
-        conversation_id: int,
+        conversation_id: str,
         prompt: str,
         conversation_summary: str,
         improve_prompt: str,
@@ -116,7 +118,7 @@ class BaseDatabase(ABC):
     # Abstract Retrieval Operations
     @abstractmethod
     async def get_conversation_context(
-        self, conversation_id: int, limit: int = 10
+        self, conversation_id: str, limit: int = 10
     ) -> List[ConversationMemory]:
         """Retrieve conversation context"""
         pass
@@ -142,7 +144,7 @@ class BaseDatabase(ABC):
 
     @abstractmethod
     async def get_conversation_summary(
-        self, conversation_id: int
+        self, conversation_id: str
     ) -> Optional[ConversationSummary]:
         """Get conversation summary"""
         pass
@@ -157,7 +159,7 @@ class BaseDatabase(ABC):
     @abstractmethod
     async def update_conversation_feedback(
         self,
-        conversation_id: int,
+        conversation_id: str,
         feedback_text: str,
         reward_score: float,
         improvement_suggestion: Optional[str] = None,

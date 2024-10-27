@@ -1,13 +1,26 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 import inspect
-from typing import Any, Dict, List, Optional, Type, Tuple
+from typing import Any, Callable, Dict, List, Optional, Type, Tuple
 
 from loguru import logger
-from mirascope.core import BaseDynamicConfig, BaseMessageParam, BaseTool, Messages
+from mirascope.core import (
+    BaseDynamicConfig,
+    BaseMessageParam,
+    BaseTool,
+    Messages,
+    prompt_template,
+    litellm,
+)
+
 
 from src.memory.memory_manager import MemoryManager
 from src.memory.models import MessageType, ShortTermMemory
+
+from src.agent.memory_toolkit.end_conversation_memory_handler import (
+    EndConversationMemoryHandler,
+)
+
 import uuid
 import random
 from rich import print
@@ -26,20 +39,34 @@ class BaseAgent(ABC):
         agent_id: Unique identifier for this agent
     """
 
+    llm_call: Callable = field(default=litellm.call)
+    model_name: str = "gemini/gemini-1.5-flash-002"
     history: List[BaseMessageParam] = field(default_factory=list)
     max_history: Optional[int] = None
     system_prompt: str = "You are an AI assistant."
     memory_manager: Optional[MemoryManager] = None
-    conversation_id: Optional[int] = None
+    conversation_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     agent_id: str = field(
         default_factory=lambda: f"Agent ID: {random.randint(1000, 9999)}"
     )
+    short_term_memory: Optional[ShortTermMemory] = None
+    end_conversation_handler: Optional[EndConversationMemoryHandler] = None
 
     def __post_init__(self):
-        pass
+        if self.memory_manager:
+            self.end_conversation_handler = EndConversationMemoryHandler(
+                llm_call=self.llm_call,
+                model_name=self.model_name,
+                agent_id=self.agent_id,
+                conversation_id=self.conversation_id,
+                system_prompt=self.system_prompt,
+                history=self.history,
+                memory_manager=self.memory_manager,
+                current_memory=self.short_term_memory,
+            )
 
     @abstractmethod
-    def get_tools(self) -> List[Type[BaseTool]]:
+    def get_tools(self) -> List[Type[BaseTool] | Callable]:
         """Get the list of tools available to this agent.
 
         Returns:
@@ -57,46 +84,71 @@ class BaseAgent(ABC):
         Returns:
             A Messages.Type object containing the full prompt
         """
+        system_prompt = f"Your ID: {self.agent_id}\n" + self.system_prompt
+
         return [
-            Messages.System(self.system_prompt),
+            Messages.System(system_prompt),
             *self.history,
             Messages.User(query),
         ]
 
     async def _update_history(self, query: str, response: BaseDynamicConfig) -> None:
-        """Update conversation history with new messages."""
+        """Update conversation history with new messages and store in memory.
+
+        Args:
+            query: The user's input query
+            response: The agent's response
+        """
         try:
-            # Add messages to history
+            # 1. Create message objects
             user_message = Messages.User(query)
             self.history.append(user_message)
 
             # Get message param safely
-            message_param = getattr(response, "message_param", None)
-            if message_param:
-                self.history.append(message_param)
+            assistant_message = getattr(response, "message_param", None)
+            if assistant_message:
+                self.history.append(assistant_message)
 
-            # Trim history if needed
+            # 2. Trim history if needed
             if self.max_history and len(self.history) > self.max_history:
                 self.history = self.history[-self.max_history :]
 
-            # Store in memory if available
+            # 3. Store messages in memory if available
             if self.memory_manager:
+                # Store user message
                 await self.memory_manager.store_conversation(
                     sender="user",
                     message_content=query,
                     message_type=MessageType.TEXT,
                     conversation_id=self.conversation_id,
                 )
-                if message_param:
+
+                # Store assistant response if available
+                if assistant_message:
+                    # Extract content safely
+                    content = str(getattr(assistant_message, "content", ""))
+                    if content:
+                        await self.memory_manager.store_conversation(
+                            sender=self.agent_id,
+                            message_content=content,
+                            message_type=MessageType.TEXT,
+                            conversation_id=self.conversation_id,
+                        )
+
+                # Store any function calls or tool usage
+                function_call = getattr(assistant_message, "function_call", None)
+                if function_call:
                     await self.memory_manager.store_conversation(
                         sender=self.agent_id,
-                        message_content=str(message_param),
-                        message_type=MessageType.TEXT,
+                        message_content=f"Tool call: {function_call}",
+                        message_type=MessageType.TOOL,
                         conversation_id=self.conversation_id,
                     )
+
         except Exception as e:
             logger.error(f"Error updating history: {e}")
-            raise
+            # Don't raise - allow conversation to continue even if storage fails
+            logger.warning("Continuing conversation without storing messages")
 
     def _build_config(self, query: str) -> Dict[str, Any]:
         """Build the configuration for the LLM call.
@@ -117,7 +169,13 @@ class BaseAgent(ABC):
             tools_and_outputs = []
             for tool in tools:
                 logger.info(f"Calling Tool '{tool._name()}' with args {tool.args}")
+                # output = (
+                #     tool.call()
+                #     if not inspect.iscoroutinefunction(tool.call)
+                #     else await tool.call()
+                # )
                 output = await tool.call()
+                logger.info(f"Tool output: {output}")
                 tools_and_outputs.append((tool, output))
 
             # Get tool messages safely
@@ -140,7 +198,7 @@ class BaseAgent(ABC):
             raise
 
     @abstractmethod
-    async def _call(self, query: str) -> BaseDynamicConfig:
+    async def _call(self, query: str | dict) -> BaseDynamicConfig:
         """Make the actual call to the LLM.
 
         This method should be implemented by subclasses to use their specific
@@ -160,10 +218,7 @@ class BaseAgent(ABC):
             response = await self._call(query)
             await self._update_history(query, response)
 
-            # Get tools safely using dict access
-            tools = response.get("tools", []) if isinstance(response, dict) else []
-
-            if tools:
+            if tools := response.tools:
                 await self._process_tools(tools, response)
                 return await self.step("")  # Continue the conversation
 
@@ -177,32 +232,26 @@ class BaseAgent(ABC):
 
     async def run(self) -> None:
         """Run the agent in an interactive loop."""
-        # Initialize conversation before starting
-        await self.initialize_conversation()
+        try:
+            # Initialize conversation
+            await self.initialize_conversation()
 
-        while True:
-            query = input("User: ")
-            if query.lower() in ["exit", "quit"]:
-                break
+            while True:
+                query = input("User: ")
+                if query.lower() in ["exit", "quit"]:
+                    break
 
-            print("Assistant: ", end="", flush=True)
-            response = await self.step(query)
-            print(response)
+                print("Assistant: ", end="", flush=True)
+                response = await self.step(query)
+                print(response)
 
-    @abstractmethod
-    async def generate_conversation_summary(self) -> str:
-        """Generate summary of the current conversation."""
-        pass
+        except Exception as e:
+            logger.error(f"Error in run: {e}")
+            print(f"An error occurred: {str(e)}")
 
-    @abstractmethod
-    async def perform_self_reflection(self) -> Tuple[float, str, str]:
-        """Perform self-reflection and return reward score, feedback and improved prompt."""
-        pass
-
-    @abstractmethod
-    async def update_short_term_memory(self) -> None:
-        """Update agent's short-term memory state."""
-        pass
+        # Handle conversation end
+        if self.end_conversation_handler:
+            await self.end_conversation_handler.memory_conversation()
 
     async def initialize_conversation(self) -> None:
         """Initialize conversation by loading best prompt and short-term memory."""
@@ -224,6 +273,7 @@ class BaseAgent(ABC):
 
             # 2. Load short-term memory
             short_term_memory = await self.memory_manager.get_short_term_memory()
+            self.short_term_memory = short_term_memory
             if short_term_memory:
                 # Update system prompt with context from short-term memory
                 self.system_prompt = self._enhance_prompt_with_memory(

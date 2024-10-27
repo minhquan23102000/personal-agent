@@ -14,7 +14,7 @@ class OpenAIEmbedding(BaseEmbedding):
         self,
         api_key: str,
         model: str = "text-embedding-3-small",
-        embedding_size: int = 364,
+        embedding_size: int = 1536,
         cache_enabled: bool = True,
     ):
         """Initialize OpenAI embedding
