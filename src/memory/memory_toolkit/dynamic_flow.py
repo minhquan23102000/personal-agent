@@ -11,7 +11,7 @@ class DynamicMemoryToolKit(BaseToolKit):
 
     __namespace__ = "memory_tools"
 
-    memory_manager: Optional[MemoryManager]
+    memory_manager: MemoryManager
 
     @toolkit_tool
     async def store_knowledge(

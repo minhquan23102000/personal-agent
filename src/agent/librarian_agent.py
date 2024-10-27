@@ -26,7 +26,7 @@ class LibrarianAgent(BaseAgent):
 
     def __post_init__(self):
         super().__post_init__()
-        self.memory_manager = MemoryManager(db_name=self.agent_id)
+        self.memory_manager = MemoryManager(db_uri=self.agent_id)
 
     def get_tools(self) -> List[Type[BaseTool]]:
         return [SearchLibrary]
@@ -36,8 +36,8 @@ class LibrarianAgent(BaseAgent):
         return super().build_prompt(query)
 
     @litellm.call("gemini/gemini-1.5-flash-002", call_params={"temperature": 0.5})
-    async def _call(self, query: str) -> BaseDynamicConfig | Dict[str, Any]:
-        return self._build_config(query)
+    async def _defalt_llm_call(self, query: str) -> BaseDynamicConfig | Dict[str, Any]:
+        return self._build_call_config(query)
 
 
 # Usage

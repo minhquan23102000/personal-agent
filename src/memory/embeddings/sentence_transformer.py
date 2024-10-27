@@ -48,7 +48,7 @@ class SentenceTransformerEmbedding(BaseEmbedding):
                 f"Failed to initialize SentenceTransformer model: {str(e)}"
             )
 
-    async def get_text_embedding(self, text: str) -> np.ndarray:
+    async def get_text_embedding(self, text: str) -> List[float]:
         """Get embedding for a text"""
         if not self.model:
             raise RuntimeError("SentenceTransformer model not initialized")
@@ -60,10 +60,8 @@ class SentenceTransformerEmbedding(BaseEmbedding):
 
             # Get embedding
             embedding = self.model.encode(
-                text,
-                convert_to_numpy=True,
-                normalize_embeddings=True,
-            )
+                [text], convert_to_numpy=True, show_progress_bar=False
+            ).tolist()[0]
 
             # Cache the result
             if self.cache_enabled:
@@ -74,7 +72,7 @@ class SentenceTransformerEmbedding(BaseEmbedding):
             logger.error(f"Error getting embedding for text: {str(e)}")
             raise
 
-    async def get_batch_embeddings(self, texts: List[str]) -> List[np.ndarray]:
+    async def get_batch_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Get embeddings for a batch of texts"""
         if not self.model:
             raise RuntimeError("SentenceTransformer model not initialized")
@@ -97,7 +95,7 @@ class SentenceTransformerEmbedding(BaseEmbedding):
                     texts_to_embed,
                     convert_to_numpy=True,
                     normalize_embeddings=True,
-                )
+                ).tolist()
 
                 for i, embedding in zip(indices_to_embed, batch_embeddings):
                     embeddings.insert(i, embedding)
@@ -111,13 +109,13 @@ class SentenceTransformerEmbedding(BaseEmbedding):
             logger.error(f"Error getting batch embeddings: {str(e)}")
             raise
 
-    async def get_entity_embedding(self, entity: str) -> np.ndarray:
+    async def get_entity_embedding(self, entity: str) -> List[float]:
         """Get embedding for an entity"""
         return await self.get_text_embedding(entity)
 
     async def get_relationship_embedding(
         self, entity1: str, relationship: str, entity2: str
-    ) -> np.ndarray:
+    ) -> List[float]:
         """Get embedding for an entity relationship"""
         relationship_text = f"{entity1} {relationship} {entity2}"
         return await self.get_text_embedding(relationship_text)

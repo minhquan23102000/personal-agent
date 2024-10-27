@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+import hashlib
 import inspect
 from typing import Any, Callable, Dict, List, Optional, Type, Tuple
 
@@ -12,22 +13,27 @@ from mirascope.core import (
     prompt_template,
     litellm,
 )
+from mirascope.core.openai import OpenAICallResponse
+import pydantic
 
 
 from src.memory.memory_manager import MemoryManager
 from src.memory.models import MessageType, ShortTermMemory
 
-from src.agent.memory_toolkit.end_conversation_memory_handler import (
-    EndConversationMemoryHandler,
-)
 
 import uuid
 import random
 from rich import print
 
 
+def generate_agent_id():
+    random_id = str(uuid.uuid4())
+    hash_id = hashlib.sha256(random_id.encode()).hexdigest()[:8]
+    return hash_id
+
+
 @dataclass
-class BaseAgent(ABC):
+class BaseAgent:
     """Base class for all agents with memory integration.
 
     Attributes:
@@ -39,43 +45,39 @@ class BaseAgent(ABC):
         agent_id: Unique identifier for this agent
     """
 
-    llm_call: Callable = field(default=litellm.call)
     model_name: str = "gemini/gemini-1.5-flash-002"
     history: List[BaseMessageParam] = field(default_factory=list)
     max_history: Optional[int] = None
-    system_prompt: str = "You are an AI assistant."
+    system_prompt: str = "You are an AI agent."
+    temperature: float = 0.5
     memory_manager: Optional[MemoryManager] = None
     conversation_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    agent_id: str = field(
-        default_factory=lambda: f"Agent ID: {random.randint(1000, 9999)}"
-    )
+    agent_id: str = field(default_factory=generate_agent_id)
     short_term_memory: Optional[ShortTermMemory] = None
-    end_conversation_handler: Optional[EndConversationMemoryHandler] = None
+    tools: List[Type[BaseTool] | Callable] = field(default_factory=list)
 
     def __post_init__(self):
         if self.memory_manager:
-            self.end_conversation_handler = EndConversationMemoryHandler(
-                llm_call=self.llm_call,
-                model_name=self.model_name,
-                agent_id=self.agent_id,
-                conversation_id=self.conversation_id,
-                system_prompt=self.system_prompt,
-                history=self.history,
-                memory_manager=self.memory_manager,
-                current_memory=self.short_term_memory,
-            )
+            dynamic_toolkit = self.memory_manager.get_dynamic_memory_toolkit()
+            self.add_tools(dynamic_toolkit.create_tools())
+            self.memory_manager.set_agent(self)
 
-    @abstractmethod
+    def add_tools(self, tools: List[Type[BaseTool] | Callable]) -> None:
+        self.tools.extend(tools)
+
     def get_tools(self) -> List[Type[BaseTool] | Callable]:
         """Get the list of tools available to this agent.
 
         Returns:
             List of tool classes that this agent can use
         """
-        return []
+        return self.tools
 
-    @abstractmethod
-    def build_prompt(self, query: str) -> Messages.Type:
+    def build_prompt(
+        self,
+        query: str | List[BaseMessageParam] | Messages.Type,
+        include_history: bool = True,
+    ) -> Messages.Type:
         """Build the prompt for the agent using the current state.
 
         Args:
@@ -84,15 +86,25 @@ class BaseAgent(ABC):
         Returns:
             A Messages.Type object containing the full prompt
         """
-        system_prompt = f"Your ID: {self.agent_id}\n" + self.system_prompt
+        system_prompt = self._enhance_prompt_with_memory()
 
-        return [
-            Messages.System(system_prompt),
-            *self.history,
-            Messages.User(query),
-        ]
+        if include_history:
+            messages = [Messages.System(system_prompt), *self.history]
+        else:
+            messages = []
 
-    async def _update_history(self, query: str, response: BaseDynamicConfig) -> None:
+        if isinstance(query, str):
+            return [
+                *messages,
+                Messages.User(query),
+            ]
+        else:
+            return [
+                *messages,
+                *query,
+            ]
+
+    async def _update_history(self, query: str, response: OpenAICallResponse) -> None:
         """Update conversation history with new messages and store in memory.
 
         Args:
@@ -150,19 +162,46 @@ class BaseAgent(ABC):
             # Don't raise - allow conversation to continue even if storage fails
             logger.warning("Continuing conversation without storing messages")
 
-    def _build_config(self, query: str) -> Dict[str, Any]:
+    def _build_call_config(
+        self,
+        query: str | List[BaseMessageParam] | Messages.Type,
+        call_params: dict = {},
+        include_history: bool = True,
+        include_tools: bool = True,
+        custom_tools: List[Type[BaseTool] | Callable] = [],
+    ) -> Dict[str, Any]:
         """Build the configuration for the LLM call.
 
         Args:
-            query: The user's input query
+            query (str): The user's input query.
+            call_params (dict, optional): Additional parameters for the LLM call. Defaults to an empty dictionary.
+            include_history (bool, optional): Flag to include conversation history. Defaults to True.
+            include_tools (bool, optional): Flag to include tools in the configuration. Defaults to True.
+            custom_tools (List[Type[BaseTool] | Callable], optional): A list of custom tools to include. Defaults to an empty list.
 
         Returns:
-            Dictionary containing the messages and tools configuration
+            Dict[str, Any]: A dictionary containing the messages and tools configuration.
         """
-        return {"messages": self.build_prompt(query), "tools": self.get_tools()}
+        if call_params.get("temperature"):
+            call_params["temperature"] = self.temperature
+
+        messages = self.build_prompt(query, include_history)
+
+        tools = []
+        if include_tools:
+            tools = self.get_tools()
+
+        if custom_tools:
+            tools.extend(custom_tools)
+
+        return {
+            "messages": messages,
+            "tools": tools,
+            "call_params": call_params,
+        }
 
     async def _process_tools(
-        self, tools: List[BaseTool], response: BaseDynamicConfig
+        self, tools: List[BaseTool], response: OpenAICallResponse
     ) -> None:
         """Process and execute tools called by the agent."""
         try:
@@ -197,25 +236,70 @@ class BaseAgent(ABC):
             logger.error(f"Error processing tools: {e}")
             raise
 
-    @abstractmethod
-    async def _call(self, query: str | dict) -> BaseDynamicConfig:
-        """Make the actual call to the LLM.
+    async def _custom_llm_call(
+        self,
+        query: str | List[BaseMessageParam] | Messages.Type,
+        response_model: pydantic.BaseModel | None = None,
+        call_params: dict = {},
+        include_history: bool = False,
+        include_tools: bool = False,
+        custom_tools: List[Type[BaseTool] | Callable] = [],
+        json_mode: bool = False,
+    ):
 
-        This method should be implemented by subclasses to use their specific
-        LLM provider.
+        config = self._build_call_config(
+            query, call_params, include_history, include_tools, custom_tools
+        )
+
+        if response_model is not None:
+
+            @litellm.call(
+                model=self.model_name,
+                response_model=response_model,
+                json_mode=json_mode,
+            )  # type: ignore
+            async def lite_llm_call(self):
+                return config
+
+            return await lite_llm_call(self)
+
+        else:
+
+            @litellm.call(model=self.model_name, **config)
+            async def lite_llm_call(self):
+                return config
+
+            return await lite_llm_call(self)
+
+    async def _defalt_llm_call(
+        self,
+        query: str,
+        call_params: dict = {},
+    ) -> OpenAICallResponse:
+        """Make a call to the LLM using litellm.
 
         Args:
-            query: The user's input query
+            config: Either a string query or a dict containing dynamic configuration
+            response_model: Optional Pydantic model for response validation
+            call_params: Additional parameters for the LLM call
 
         Returns:
             The LLM's response
         """
-        pass
 
-    async def step(self, query: str) -> str:
+        # Create the LLM call function
+        config = self._build_call_config(query, call_params)
+
+        @litellm.call(model=self.model_name)
+        async def lite_llm_call(self):
+            return config
+
+        return lite_llm_call(self)
+
+    async def step(self, query: str):
         """Execute one step of the agent's reasoning process."""
         try:
-            response = await self._call(query)
+            response = await self._defalt_llm_call(query)
             await self._update_history(query, response)
 
             if tools := response.tools:
@@ -223,7 +307,7 @@ class BaseAgent(ABC):
                 return await self.step("")  # Continue the conversation
 
             # Return string response
-            return str(getattr(response, "content", "")) if response else ""
+            return str(getattr(response, "content", "")) if response else response
 
         except Exception as e:
             logger.error(f"Error in agent step: {e}")
@@ -250,8 +334,8 @@ class BaseAgent(ABC):
             print(f"An error occurred: {str(e)}")
 
         # Handle conversation end
-        if self.end_conversation_handler:
-            await self.end_conversation_handler.memory_conversation()
+        if self.memory_manager:
+            await self.memory_manager.reflection_conversation()
 
     async def initialize_conversation(self) -> None:
         """Initialize conversation by loading best prompt and short-term memory."""
@@ -274,48 +358,54 @@ class BaseAgent(ABC):
             # 2. Load short-term memory
             short_term_memory = await self.memory_manager.get_short_term_memory()
             self.short_term_memory = short_term_memory
-            if short_term_memory:
-                # Update system prompt with context from short-term memory
-                self.system_prompt = self._enhance_prompt_with_memory(
-                    self.system_prompt, short_term_memory
-                )
-                logger.info("Enhanced system prompt with short-term memory context")
+
+            logger.info("Enhanced system prompt with short-term memory context")
 
         except Exception as e:
             logger.error(f"Error initializing conversation: {e}")
             # Use default prompt if initialization fails
             logger.info("Using default system prompt")
 
-    def _enhance_prompt_with_memory(
-        self, base_prompt: str, memory: ShortTermMemory
-    ) -> str:
+    def _enhance_prompt_with_memory(self) -> str:
         """Enhance the system prompt with context from short-term memory.
 
-        Args:
-            base_prompt: Original system prompt
-            memory: Current short-term memory state
 
         Returns:
             Enhanced prompt incorporating memory context
         """
         # Build enhanced prompt with memory context
 
-        short_memory_prompt = inspect.cleandoc(
+        # Agent id
+        agent_id = f"Your ID: {self.agent_id}\n"
+
+        if self.short_term_memory:
+            short_memory_prompt = inspect.cleandoc(
+                f"""
+                ## AGENT INFORMATION & IDENTITY: {self.short_term_memory.agent_info}
+                ## AGENT BELIEFS: {self.short_term_memory.agent_beliefs}
+                
+                ## USER INFORMATION: {self.short_term_memory.user_info}
+                
+                ## LAST CONVERSATION SUMMARY: {self.short_term_memory.last_conversation_summary}
+                ## RECENT GOALS AND STATUS: {self.short_term_memory.recent_goal_and_status}
+                ## IMPORTANT CONTEXT: {self.short_term_memory.important_context}
+                """
+            )
+        else:
+            short_memory_prompt = "This is your first interaction with the user."
+
+        enhanced_prompt = inspect.cleandoc(
             f"""
-            User Information: \n{memory.user_info}\n
-            Recent Goals and Status: \n{memory.recent_goal_and_status}\n
-            Important Context: \n{memory.important_context}\n
-            Current Beliefs: \n{memory.agent_beliefs}\n
-            Last Conversation Summary: \n{memory.last_conversation_summary}\n
+            # AGENT ID: {agent_id}
+            
+            # SYSTEM INSTRUCTIONS:
+            
+            {self.system_prompt}
+            
+            # CONTEXT FROM PREVIOUS INTERACTIONS:
+            
+            {short_memory_prompt}
             """
         )
 
-        enhanced_prompt = [
-            "# System Prompt\n",
-            base_prompt,
-            "",
-            "# Context from previous interactions:\n",
-            short_memory_prompt,
-        ]
-
-        return "\n".join(enhanced_prompt)
+        return enhanced_prompt

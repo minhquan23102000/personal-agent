@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import Callable, List
 from mirascope.core import prompt_template, BaseMessageParam, litellm, BaseDynamicConfig
 from pydantic import BaseModel, Field
@@ -7,18 +6,7 @@ from src.memory.models import ShortTermMemory
 from src.memory.memory_manager import MemoryManager
 
 from loguru import logger
-
-
-class BaseConversationSummary(BaseModel):
-    """Model for conversation summary response."""
-
-    summary: str = Field(
-        description="Concise summary of the conversation focusing on key points"
-    )
-    key_points: List[str] = Field(
-        description="List of main points from the conversation"
-    )
-    outcomes: List[str] = Field(description="List of decisions or outcomes reached")
+from src.agent.base_agent import BaseAgent
 
 
 class BaseSelfReflection(BaseModel):
@@ -37,33 +25,6 @@ class BaseSelfReflection(BaseModel):
     improved_prompt: str = Field(
         description="Enhanced system prompt addressing identified issues"
     )
-
-
-class BaseShortTermMemoryUpdate(BaseModel):
-    """Model for short-term memory updates."""
-
-    user_info: str = Field(description="Updated user information")
-    recent_goal_and_status: str = Field(description="Current goals and their status")
-    important_context: str = Field(description="Key contextual information")
-    agent_beliefs: str = Field(description="Updated agent beliefs")
-    agent_info: str = Field(description="Agent's current information")
-
-
-@prompt_template(
-    """
-    Please provide a structured summary of the following conversation.
-    Focus on extracting key points, decisions made, and outcomes reached.
-    
-    Conversation History:
-    {history}
-    
-    Provide your response in a structured format with:
-    1. A concise overall summary
-    2. Key discussion points
-    3. Specific outcomes or decisions reached
-    """
-)
-def base_conversation_summary_prompt(history): ...
 
 
 @prompt_template(
@@ -97,6 +58,33 @@ def base_conversation_summary_prompt(history): ...
     """
 )
 def base_self_reflection_prompt(system_prompt, history): ...
+
+
+async def perform_self_reflection(agent: BaseAgent) -> BaseSelfReflection:
+    """Perform structured self-reflection and generate improvements."""
+    try:
+        prompt = base_self_reflection_prompt(
+            system_prompt=agent.system_prompt, history=agent.history
+        )
+        response = await agent._custom_llm_call(
+            query=prompt,
+            response_model=BaseSelfReflection,
+            json_mode=True,
+        )
+        return response
+    except Exception as e:
+        logger.error(f"Error performing self-reflection: {e}")
+        raise
+
+
+class BaseShortTermMemoryUpdate(BaseModel):
+    """Model for short-term memory updates."""
+
+    user_info: str = Field(description="Updated user information")
+    recent_goal_and_status: str = Field(description="Current goals and their status")
+    important_context: str = Field(description="Key contextual information")
+    agent_beliefs: str = Field(description="Updated agent beliefs")
+    agent_info: str = Field(description="Agent's current information")
 
 
 @prompt_template(
@@ -133,67 +121,25 @@ def base_self_reflection_prompt(system_prompt, history): ...
 def short_term_memory_prompt(history, summary, current_memory): ...
 
 
-@dataclass
-class EndConversationMemoryHandler:
-    llm_call: Callable
-    model_name: str
-    agent_id: str
-    conversation_id: str
-    system_prompt: str
-    history: List[BaseMessageParam]
-    memory_manager: MemoryManager
-    current_memory: ShortTermMemory | None
-
-    async def generate_conversation_summary(self) -> BaseConversationSummary:
-        """Generate a structured summary of the current conversation."""
-        try:
-
-            prompt = base_conversation_summary_prompt(history=self.history)
-            response = self.llm_call(
-                model=self.model_name,
-                response_model=BaseConversationSummary,
-                json_mode=True,
-            )(prompt)
-            return response
-        except Exception as e:
-            logger.error(f"Error generating conversation summary: {e}")
-            raise
-
-    async def perform_self_reflection(self) -> BaseSelfReflection:
-        """Perform structured self-reflection and generate improvements."""
-        try:
-            prompt = base_self_reflection_prompt(
-                system_prompt=self.system_prompt, history=self.history
-            )
-            response = self.llm_call(
-                model=self.model_name,
-                response_model=BaseSelfReflection,
-                json_mode=True,
-            )(prompt)
-            return response
-        except Exception as e:
-            logger.error(f"Error performing self-reflection: {e}")
-            raise
-
-    async def generate_updated_short_term_memory(
-        self, summary: BaseConversationSummary
-    ) -> BaseShortTermMemoryUpdate:
-        """Get updated short-term memory state after conversation."""
-        try:
-            prompt = short_term_memory_prompt(
-                history=self.history,
-                summary=summary,
-                current_memory=self.current_memory,
-            )
-            response = self.llm_call(
-                model=self.model_name,
-                response_model=BaseShortTermMemoryUpdate,
-                json_mode=True,
-            )(prompt)
-            return response
-        except Exception as e:
-            logger.error(f"Error generating updated short-term memory: {e}")
-            raise
+async def generate_updated_short_term_memory(
+    agent: BaseAgent, summary: BaseConversationSummary
+) -> BaseShortTermMemoryUpdate:
+    """Get updated short-term memory state after conversation."""
+    try:
+        prompt = short_term_memory_prompt(
+            history=agent.history,
+            summary=summary,
+            current_memory=agent.short_term_memory,
+        )
+        response = await agent._custom_llm_call(
+            query=prompt,
+            response_model=BaseShortTermMemoryUpdate,
+            json_mode=True,
+        )
+        return response
+    except Exception as e:
+        logger.error(f"Error generating updated short-term memory: {e}")
+        raise
 
     # Update end_conversation to include short-term memory update
     async def memory_conversation(self) -> None:

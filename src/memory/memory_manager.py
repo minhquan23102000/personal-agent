@@ -1,9 +1,9 @@
 from typing import Optional, List, Tuple, TypeVar, Callable, Generic, Any
 from dataclasses import dataclass
 from datetime import datetime
-import numpy as np
 from loguru import logger
 
+from src.agent.base_agent import BaseAgent
 from src.memory.models import (
     ConversationMemory,
     Knowledge,
@@ -17,6 +17,10 @@ from src.memory.embeddings.base import BaseEmbedding
 from src.memory.retrieval.reranker import CrossEncoderReranker
 from src.memory.database.sqlite import SQLiteDatabase
 from src.memory.embeddings.sentence_transformer import SentenceTransformerEmbedding
+from src.memory.memory_toolkit.dynamic_flow import DynamicMemoryToolKit
+from src.memory.memory_toolkit.static_flow.end_conversation import (
+    reflection_conversation,
+)
 
 T = TypeVar("T")
 
@@ -24,7 +28,7 @@ T = TypeVar("T")
 class MemoryManager:
     def __init__(
         self,
-        db_name: str,
+        db_uri: str,
         database: BaseDatabase | None = None,
         embedding_model: BaseEmbedding | None = None,
         similarity_threshold: float = 0.7,
@@ -50,7 +54,7 @@ class MemoryManager:
             self.db = database
         else:
             self.db = SQLiteDatabase(
-                embedding_size=self.embedding_model.embedding_size, db_name=db_name
+                embedding_size=self.embedding_model.embedding_size, db_uri=db_uri
             )
 
         self.similarity_threshold = similarity_threshold
@@ -59,6 +63,15 @@ class MemoryManager:
         self.use_reranker = use_reranker
         if use_reranker:
             self.reranker = CrossEncoderReranker()
+
+    def set_agent(self, agent: BaseAgent) -> None:
+        self.agent = agent
+
+    def get_dynamic_memory_toolkit(self) -> DynamicMemoryToolKit:
+        return DynamicMemoryToolKit(memory_manager=self)
+
+    async def reflection_conversation(self) -> None:
+        await reflection_conversation(memory_manager=self)
 
     async def store_conversation(
         self,
@@ -84,8 +97,8 @@ class MemoryManager:
         text: str,
         entities: List[str],
         keywords: List[str],
-        text_embedding: np.ndarray,
-        entity_embeddings: np.ndarray,
+        text_embedding: List[float],
+        entity_embeddings: List[float],
     ) -> Knowledge:
         """Store new knowledge with embeddings"""
         try:
@@ -101,7 +114,7 @@ class MemoryManager:
             raise
 
     async def search_similar_knowledge(
-        self, query_embedding: np.ndarray, limit: int = 5
+        self, query_embedding: List[float], limit: int = 5
     ) -> List[Knowledge]:
         """Search for similar knowledge using vector similarity"""
         try:
@@ -109,7 +122,6 @@ class MemoryManager:
                 query_embedding=query_embedding,
                 limit=limit,
             )
-
         except Exception as e:
             logger.error(f"Error searching knowledge: {str(e)}")
             raise
@@ -117,7 +129,7 @@ class MemoryManager:
     async def store_entity_relationship(
         self,
         relationship_text: str,
-        embedding: np.ndarray,
+        embedding: List[float],
     ) -> EntityRelationship:
         """Store entity relationship with embedding"""
         try:
@@ -130,7 +142,7 @@ class MemoryManager:
             raise
 
     async def search_similar_entities(
-        self, query_embedding: np.ndarray, limit: int = 10
+        self, query_embedding: List[float], limit: int = 10
     ) -> List[EntityRelationship]:
         """Search for similar entity relationships using vector similarity"""
         try:
@@ -216,8 +228,8 @@ class MemoryManager:
 
     async def _calculate_similarity(
         self,
-        query_embedding: np.ndarray,
-        target_embedding: np.ndarray,
+        query_embedding: List[float],
+        target_embedding: List[float],
     ) -> float:
         """Calculate cosine similarity between embeddings
 
@@ -228,7 +240,7 @@ class MemoryManager:
         Returns:
             float: Cosine similarity score
         """
-        return float(np.dot(query_embedding, target_embedding))
+        return float(sum(a * b for a, b in zip(query_embedding, target_embedding)))
 
     async def _rerank_results(
         self,

@@ -1,4 +1,4 @@
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import numpy as np
 from datetime import datetime, timedelta
 from loguru import logger
@@ -13,10 +13,10 @@ class EmbeddingCache:
         Args:
             ttl_seconds (int): Time-to-live in seconds for cache entries
         """
-        self.cache: Dict[str, tuple[np.ndarray, datetime]] = {}
+        self.cache: Dict[str, tuple[List[float], datetime]] = {}
         self.ttl = timedelta(seconds=ttl_seconds)
 
-    async def get(self, key: str) -> Optional[np.ndarray]:
+    async def get(self, key: str) -> Optional[List[float]]:
         """Get embedding from cache"""
         try:
             if key in self.cache:
@@ -31,7 +31,7 @@ class EmbeddingCache:
             logger.error(f"Error getting from cache: {str(e)}")
             return None
 
-    async def set(self, key: str, embedding: np.ndarray) -> None:
+    async def set(self, key: str, embedding: List[float]) -> None:
         """Set embedding in cache"""
         try:
             self.cache[key] = (embedding, datetime.now())

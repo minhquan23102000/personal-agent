@@ -3,10 +3,10 @@ import sqlite3
 import sqlite_vec
 import json
 from datetime import datetime, UTC
-import numpy as np
 from contextlib import asynccontextmanager
 from pathlib import Path
 from loguru import logger
+from dataclasses import dataclass, field
 
 from src.memory.database.base import BaseDatabase
 from src.memory.models import (
@@ -21,33 +21,47 @@ import asyncio
 import re
 
 
+@dataclass
 class SQLiteDatabase(BaseDatabase):
-    def __init__(self, db_name: str = "memory", embedding_size: int = 364):
-        db_name = re.sub(
-            r"[^\w]", "_", db_name
-        )  # Replace all non-word characters with underscores
-        # remove leading and trailing underscores
-        db_name = re.sub(r"_{2,}", "_", db_name)
-        db_name = db_name.strip("_")
+    db_uri: str = "memory"
+    embedding_size: int = 364
+    connection_config: dict = field(init=False)
 
-        super().__init__({"db_name": f"{db_name}.db", "embedding_size": embedding_size})
+    def __post_init__(self):
+        # Clean up db_uri
+        self.db_uri = re.sub(r"[^\w]", "_", self.db_uri)
+        self.db_uri = re.sub(r"_{2,}", "_", self.db_uri)
+        self.db_uri = self.db_uri.strip("_")
+
+        if not self.db_uri.endswith(".db"):
+            self.db_uri = f"{self.db_uri}.db"
+
+        # Set connection config
+        self.connection_config = {
+            "db_uri": self.db_uri,
+            "embedding_size": self.embedding_size,
+        }
+
+        super().__post_init__()
 
     def _validate_config(self) -> None:
-        db_name = self.connection_config["db_name"]
-        if not isinstance(db_name, str):
-            raise ValueError("db_name must be a string")
+        """Validate the connection configuration"""
+        if not isinstance(self.connection_config["db_uri"], str):
+            raise ValueError("db_uri must be a string")
 
-        embedding_size = self.connection_config["embedding_size"]
-        if not isinstance(embedding_size, int) or embedding_size <= 0:
+        if (
+            not isinstance(self.connection_config["embedding_size"], int)
+            or self.connection_config["embedding_size"] <= 0
+        ):
             raise ValueError("embedding_size must be a positive integer")
 
     def _setup_connection(self) -> None:
         """Initialize SQLite and load vector extension"""
         try:
-            db_name = self.connection_config["db_name"]
-            Path(db_name).parent.mkdir(parents=True, exist_ok=True)
+            db_uri = self.connection_config["db_uri"]
+            Path(db_uri).parent.mkdir(parents=True, exist_ok=True)
 
-            with sqlite3.connect(db_name) as conn:
+            with sqlite3.connect(db_uri) as conn:
                 conn.enable_load_extension(True)
                 sqlite_vec.load(conn)
                 conn.enable_load_extension(False)
@@ -62,7 +76,7 @@ class SQLiteDatabase(BaseDatabase):
 
     @asynccontextmanager
     async def get_connection(self) -> AsyncGenerator[sqlite3.Connection, None]:
-        conn = sqlite3.connect(self.connection_config["db_name"])
+        conn = sqlite3.connect(self.connection_config["db_uri"])
         try:
             conn.enable_load_extension(True)
             sqlite_vec.load(conn)
@@ -105,49 +119,48 @@ class SQLiteDatabase(BaseDatabase):
             """
             )
 
-            # Create knowledge table
+            # Create knowledge table (without embedding columns)
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS knowledge (
                     knowledge_id INTEGER PRIMARY KEY,
                     text TEXT NOT NULL,
                     entities TEXT NOT NULL,
-                    entity_embeddings BLOB NOT NULL,
-                    text_embedding BLOB NOT NULL,
                     keywords TEXT NOT NULL
                 )
             """
             )
 
-            # # Create vector index for knowledge
-            # conn.execute(
-            #     f"""
-            #     CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_vec USING vec0(
-            #         text_embedding({self.connection_config['embedding_size']})
-            #     )
+            # Create vector index for knowledge
+            conn.execute(
+                f"""
+                CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_vec USING vec0(
+                    knowledge_id integer primary key,
+                    text_embedding float[{self.connection_config['embedding_size']}],
+                    entity_embeddings float[{self.connection_config['embedding_size']}]
+                )
+                """
+            )
 
-            # """
-            # )
-
-            # Create entities table
+            # Create entities table (without embedding column)
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS entities (
                     relationship_id INTEGER PRIMARY KEY,
-                    relationship_text TEXT NOT NULL,
-                    embedding BLOB NOT NULL
+                    relationship_text TEXT NOT NULL
                 )
             """
             )
 
-            # # Create vector index for entities
-            # conn.execute(
-            #     f"""
-            #     CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec USING vec0(
-            #         embedding({self.connection_config['embedding_size']})
-            #     )
-            # """
-            # )
+            # Create vector index for entities
+            conn.execute(
+                f"""
+                CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec USING vec0(
+                    relationship_id integer primary key,
+                    embedding float[{self.connection_config['embedding_size']}]
+                )
+                """
+            )
 
             # Create conversation summary table
             conn.execute(
@@ -216,36 +229,40 @@ class SQLiteDatabase(BaseDatabase):
         text: str,
         entities: List[str],
         keywords: List[str],
-        text_embedding: np.ndarray,
-        entity_embeddings: np.ndarray,
+        text_embedding: List[float],
+        entity_embeddings: List[float],
     ) -> Knowledge:
         """Store knowledge with embeddings"""
         async with self.get_connection() as conn:
-            text_embedding_blob = sqlite_vec.serialize_float32(text_embedding.tolist())
-            entity_embeddings_blob = sqlite_vec.serialize_float32(
-                entity_embeddings.tolist()
-            )
-
+            # Store in regular table
             cursor = conn.execute(
                 """
-                INSERT INTO knowledge (text, entities, entity_embeddings, text_embedding, keywords)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO knowledge (text, entities, keywords)
+                VALUES (?, ?, ?)
                 """,
                 (
                     text,
                     json.dumps(entities),
-                    entity_embeddings_blob,
-                    text_embedding_blob,
                     json.dumps(keywords),
                 ),
             )
             knowledge_id = cursor.lastrowid or 0
 
-            # Add to vector index
-            # conn.execute(
-            #     "INSERT INTO knowledge_vec(rowid, text_embedding) VALUES (?, ?)",
-            #     (knowledge_id, text_embedding_blob),
-            # )
+            # Store in vector table
+            conn.execute(
+                """
+                INSERT INTO knowledge_vec(
+                    knowledge_id, 
+                    text_embedding,
+                    entity_embeddings
+                ) VALUES (?, ?, ?)
+                """,
+                (
+                    knowledge_id,
+                    json.dumps(text_embedding),
+                    json.dumps(entity_embeddings),
+                ),
+            )
 
             conn.commit()
 
@@ -253,41 +270,48 @@ class SQLiteDatabase(BaseDatabase):
                 knowledge_id=knowledge_id,
                 text=text,
                 entities=entities,
-                entity_embeddings=entity_embeddings_blob,
-                text_embedding=text_embedding_blob,
+                entity_embeddings=entity_embeddings,
+                text_embedding=text_embedding,
                 keywords=keywords,
             )
 
     async def store_entity_relationship(
         self,
         relationship_text: str,
-        embedding: np.ndarray,
+        embedding: List[float],
     ) -> EntityRelationship:
         """Store entity relationship with embedding"""
         async with self.get_connection() as conn:
-            embedding_blob = sqlite_vec.serialize_float32(embedding.tolist())
-
+            # Store in regular table
             cursor = conn.execute(
                 """
-                INSERT INTO entities (relationship_text, embedding)
-                VALUES (?, ?)
+                INSERT INTO entities (relationship_text)
+                VALUES (?)
                 """,
-                (relationship_text, embedding_blob),
+                (relationship_text,),
             )
             relationship_id = cursor.lastrowid or 0
 
-            # Add to vector index
-            # conn.execute(
-            #     "INSERT INTO entities_vec(rowid, embedding) VALUES (?, ?)",
-            #     (relationship_id, embedding_blob),
-            # )
+            # Store in vector table
+            conn.execute(
+                """
+                INSERT INTO entities_vec(
+                    relationship_id,
+                    embedding
+                ) VALUES (?, ?)
+                """,
+                (
+                    relationship_id,
+                    json.dumps(embedding),
+                ),
+            )
 
             conn.commit()
 
             return EntityRelationship(
                 relationship_id=relationship_id,
                 relationship_text=relationship_text,
-                embedding=embedding_blob,
+                embedding=embedding,
             )
 
     async def get_conversation_context(
@@ -321,7 +345,7 @@ class SQLiteDatabase(BaseDatabase):
 
     async def search_similar_knowledge(
         self,
-        query_embedding: np.ndarray,
+        query_embedding: List[float],
         vector_column: Literal[
             "text_embedding", "entity_embeddings"
         ] = "text_embedding",
@@ -329,15 +353,28 @@ class SQLiteDatabase(BaseDatabase):
     ) -> List[Knowledge]:
         """Search for similar knowledge using vector similarity"""
         async with self.get_connection() as conn:
-            query_blob = sqlite_vec.serialize_float32(query_embedding.tolist())
+            query_json = json.dumps(query_embedding)
+
             cursor = conn.execute(
                 f"""
-                SELECT k.*, vec_cosine_similarity(k.{vector_column}, ?) as similarity
+                WITH vector_matches AS (
+                    SELECT 
+                        knowledge_id,
+                        {vector_column} as embedding,
+                        distance
+                    FROM knowledge_vec
+                    WHERE {vector_column} MATCH ?
+                    LIMIT ?
+                )
+                SELECT 
+                    k.*,
+                    vm.embedding,
+                    vm.distance
                 FROM knowledge k
-                ORDER BY similarity DESC
-                LIMIT ?
+                JOIN vector_matches vm ON k.knowledge_id = vm.knowledge_id
+                ORDER BY vm.distance
                 """,
-                (query_blob, limit),
+                (query_json, limit),
             )
 
             rows = cursor.fetchall()
@@ -346,27 +383,40 @@ class SQLiteDatabase(BaseDatabase):
                     knowledge_id=row[0],
                     text=row[1],
                     entities=json.loads(row[2]),
-                    entity_embeddings=row[3],
+                    keywords=json.loads(row[3]),
                     text_embedding=row[4],
-                    keywords=json.loads(row[5]),
+                    entity_embeddings=row[5],
                 )
                 for row in rows
             ]
 
     async def search_similar_entities(
-        self, query_embedding: np.ndarray, limit: int = 5
+        self, query_embedding: List[float], limit: int = 5
     ) -> List[EntityRelationship]:
         """Search for similar entities using vector similarity"""
         async with self.get_connection() as conn:
-            query_blob = sqlite_vec.serialize_float32(query_embedding.tolist())
+            query_json = json.dumps(query_embedding)
+
             cursor = conn.execute(
                 """
-                SELECT e.*, vec_cosine_similarity(e.embedding, ?) as similarity
+                WITH vector_matches AS (
+                    SELECT 
+                        relationship_id,
+                        embedding,
+                        distance
+                    FROM entities_vec
+                    WHERE embedding MATCH ?
+                    LIMIT ?
+                )
+                SELECT 
+                    e.*,
+                    vm.embedding,
+                    vm.distance
                 FROM entities e
-                ORDER BY similarity DESC
-                LIMIT ?
+                JOIN vector_matches vm ON e.relationship_id = vm.relationship_id
+                ORDER BY vm.distance
                 """,
-                (query_blob, limit),
+                (query_json, limit),
             )
 
             rows = cursor.fetchall()
@@ -374,7 +424,7 @@ class SQLiteDatabase(BaseDatabase):
                 EntityRelationship(
                     relationship_id=row[0],
                     relationship_text=row[1],
-                    embedding=row[2],
+                    embedding=json.loads(row[2]),
                 )
                 for row in rows
             ]

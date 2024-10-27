@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import AsyncGenerator, Any, List, Literal, Optional
 from datetime import datetime
-import numpy as np
+from dataclasses import dataclass
 
 from src.memory.models import (
     ConversationMemory,
@@ -13,14 +13,14 @@ from src.memory.models import (
 )
 
 
+@dataclass
 class BaseDatabase(ABC):
     """Abstract base class for database implementations"""
 
-    db_name: str
+    connection_config: dict
 
-    def __init__(self, connection_config: dict):
+    def __post_init__(self):
         """Initialize database with connection configuration"""
-        self.connection_config = connection_config
         self._validate_config()
         self._setup_connection()
 
@@ -85,8 +85,8 @@ class BaseDatabase(ABC):
         text: str,
         entities: List[str],
         keywords: List[str],
-        text_embedding: np.ndarray,
-        entity_embeddings: np.ndarray,
+        text_embedding: List[float],
+        entity_embeddings: List[float],
     ) -> Knowledge:
         """Store knowledge with embeddings"""
         pass
@@ -95,7 +95,7 @@ class BaseDatabase(ABC):
     async def store_entity_relationship(
         self,
         relationship_text: str,
-        embedding: np.ndarray,
+        embedding: List[float],
     ) -> EntityRelationship:
         """Store entity relationship"""
         pass
@@ -126,7 +126,7 @@ class BaseDatabase(ABC):
     @abstractmethod
     async def search_similar_knowledge(
         self,
-        query_embedding: np.ndarray,
+        query_embedding: List[float],
         vector_column: Literal[
             "text_embedding", "entity_embeddings"
         ] = "text_embedding",
@@ -137,7 +137,7 @@ class BaseDatabase(ABC):
 
     @abstractmethod
     async def search_similar_entities(
-        self, query_embedding: np.ndarray, limit: int = 5
+        self, query_embedding: List[float], limit: int = 5
     ) -> List[EntityRelationship]:
         """Search for similar entities"""
         pass
