@@ -59,7 +59,7 @@ User: exit
 
 async def main():
     agent = Eva()
-    await agent.run()
+    await agent.run(as_chat=False)
     # agent.history = [history_sample]
     # summary = await generate_conversation_summary(agent)
     # print(summary)

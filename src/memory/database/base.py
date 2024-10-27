@@ -167,3 +167,8 @@ class BaseDatabase(ABC):
     ) -> Optional[ConversationSummary]:
         """Update conversation feedback"""
         pass
+
+    @abstractmethod
+    async def get_latest_conversation_summary(self) -> Optional[ConversationSummary]:
+        """Get the most recent conversation summary"""
+        pass

@@ -430,3 +430,11 @@ class MemoryManager:
         except Exception as e:
             logger.error(f"Error retrieving short-term memory: {str(e)}")
             raise
+
+    async def get_latest_conversation_summary(self) -> Optional[ConversationSummary]:
+        """Retrieve the most recent conversation summary"""
+        try:
+            return await self.db.get_latest_conversation_summary()
+        except Exception as e:
+            logger.error(f"Error retrieving latest conversation summary: {str(e)}")
+            raise

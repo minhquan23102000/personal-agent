@@ -652,3 +652,30 @@ class SQLiteDatabase(BaseDatabase):
                 agent_beliefs=row[4],
                 agent_info=row[5],
             )
+
+    async def get_latest_conversation_summary(self) -> Optional[ConversationSummary]:
+        """Get the most recent conversation summary"""
+        async with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT * FROM conversation_summary
+                ORDER BY timestamp DESC
+                LIMIT 1
+                """
+            )
+
+            row = cursor.fetchone()
+            if not row:
+                return None
+
+            return ConversationSummary(
+                conversation_id=row[0],
+                prompt=row[1],
+                feedback_text=row[2],
+                example=row[3],
+                improvement_suggestion=row[4],
+                improve_prompt=row[5],
+                reward_score=row[6],
+                conversation_summary=row[7],
+                timestamp=datetime.fromisoformat(row[8]),
+            )

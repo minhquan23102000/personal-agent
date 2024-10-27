@@ -24,10 +24,10 @@ class BaseConversationSummary(BaseModel):
 
 def base_conversation_summary_prompt(history):
     return [
-        Messages.User(
+        Messages.System(
             inspect.cleandoc(
                 f"""
-            Create a structured summary of the conversation below:
+            Create a structured summary of the conversation below. The information should be compressed as much as possible while still retaining the most important details.
             
             {history}
             """

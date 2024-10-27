@@ -9,35 +9,19 @@ from src.memory.memory_manager import MemoryManager
 class DynamicMemoryToolKit(BaseToolKit):
     """Toolkit for managing memory operations including storage and retrieval."""
 
-    __namespace__ = "memory_tools"
+    __namespace__ = "long_term_memory_operations"
 
     memory_manager: MemoryManager
 
     @toolkit_tool
-    async def store_knowledge(
+    async def remember_knowledge(
         self,
         knowledge_text: str,
         entities: List[str],
         relationship_text: List[str],
     ) -> str:
-        """Store Knowledge in Your Long Term Memory. Call this method when you learn new knowledge in the conversation.
-        This method allows you to remember important knowledge and information for future use.
-        It checks if the knowledge already exists in memory to avoid duplicates. If the knowledge
-        is new, it stores the text along with associated entities and their relationships.
-        For Example:
-            result = await dynamic_memory_toolkit.store_knowledge(
-                knowledge_text="Python is a programming language.",
-                entities=["Python", "Programming Language"],
-                relationship_text=["Python is used for web development.", "Python is popular for data science."]
-            )
-            print(result)  # Outputs: Successfully stored knowledge: Python is a programming language.
+        """Whenever you encounter new, important information during our conversation, save it to your long-term memory using the provided 'Store Knowledge' method. This ensures the information is retained even across different conversations or sessions. To store knowledge, provide the text you want to remember, a list of relevant entities associated with it, and descriptions of how those entities relate to each other."""
 
-        Args:
-            self: The DynamicMemoryToolKit instance. Ignore this parameter.
-            knowledge_text (str): The text of the knowledge to be stored.
-            entities (List[str]): A list of entities related to the knowledge.
-            relationship_text (List[str]): A list of relationship descriptions related to the entities.
-        """
         try:
             if not self.memory_manager:
                 return "Error: Memory manager not available"
@@ -112,19 +96,7 @@ class DynamicMemoryToolKit(BaseToolKit):
 
     @toolkit_tool
     async def search_knowledge(self, query: str) -> str:
-        """Search for relevant knowledge in memory.
-        This function allows you to search for knowledge entries stored in the memory manager based on a given query. It retrieves relevant knowledge and associated entity relationships, providing a structured response.
-        Ensure that the query is specific enough to yield relevant results.
-        Use keywords that are likely to match the stored knowledge for better search accuracy.
-        Handle the returned string appropriately, especially if it indicates no results were found.
-        For Example:
-            To search for knowledge related to "machine learning", you would call,
-            result = await search_knowledge(query="machine learning")
-            print(result)
-
-        Args:
-            query (str): The search term or phrase used to find relevant knowledge in memory.
-        """
+        """Retrieve relevant information from the conversation history based on the provided query. This function helps answer user questions or recall crucial details mentioned earlier. Search the knowledge base using the given query to locate pertinent information and any associated entities."""
         try:
             if not self.memory_manager:
                 return "Error: Memory manager not available"
@@ -157,15 +129,8 @@ class DynamicMemoryToolKit(BaseToolKit):
 
     @toolkit_tool
     async def search_entity_relationships(self, entities: List[str]) -> str:
-        """Search for relationships between specified entities in memory.
-        This function allows you to find and retrieve relationships between specified entities stored in the memory manager. It provides insights into how entities are connected and any related knowledge that may enhance understanding.
-        Provide a clear and concise list of entities to ensure accurate results.
-        Use entity names that are commonly recognized within the context of your application.
-        Be aware that the function may return no results if the entities are not related or if they do not exist in memory.
-        For Example:
-            To search for relationships between entities "Alice" and "Bob", you would call,
-            result = await search_entity_relationships(entities=["Alice", "Bob"])
-            print(result)
+        """Retrieve relationships between specified entities in memory by providing a clear and concise list of commonly recognized entity names. Use this when entities are mentioned in the conversation.
+        For example, to find connections between 'Alice' and 'Bob', search_entity_relationships(entities=['Alice', 'Bob'])
 
         Args:
             entities (List[str]): A list of entity names for which relationships are to be searched. Ensure that the entities are accurately spelled and relevant to the context of the search.

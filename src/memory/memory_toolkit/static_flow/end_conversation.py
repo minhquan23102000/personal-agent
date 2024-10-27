@@ -13,6 +13,9 @@ from src.memory.memory_toolkit.static_flow.perform_relection import (
 )
 from typing import TYPE_CHECKING
 
+from rich.console import Console
+from rich.markdown import Markdown
+
 if TYPE_CHECKING:
     from src.memory.memory_manager import MemoryManager
 
@@ -21,11 +24,15 @@ if TYPE_CHECKING:
 async def reflection_conversation(memory_manager: "MemoryManager") -> None:
     """Handle all end of conversation tasks."""
     logger.info("Starting end of conversation memory...")
+
     try:
 
         # 1. Generate conversation summary and reflection
         summary_response = await generate_conversation_summary(memory_manager.agent)
         reflection_response = await perform_self_reflection(memory_manager.agent)
+
+        logger.info(f"Summary: {summary_response}")
+        logger.info(f"Reflection: {reflection_response}")
 
         # 2. Store conversation summary and improvements
         await memory_manager.store_conversation_summary(
@@ -52,11 +59,12 @@ async def reflection_conversation(memory_manager: "MemoryManager") -> None:
             summary=summary_response,
             agent=memory_manager.agent,
         )
+        logger.info(f"Memory Updates: {memory_updates}")
 
         # Store updated memory
         await memory_manager.store_short_term_memory(
             user_info=memory_updates.user_info,
-            last_conversation_summary=str(summary_response),
+            last_conversation_summary=summary_response.summary,
             recent_goal_and_status=memory_updates.recent_goal_and_status,
             important_context=memory_updates.important_context,
             agent_beliefs=memory_updates.agent_beliefs,

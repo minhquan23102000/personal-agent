@@ -18,38 +18,56 @@ if TYPE_CHECKING:
 class BaseShortTermMemoryUpdate(BaseModel):
     """Model for short-term memory updates."""
 
-    user_info: str = Field(description="Updated user information")
-    recent_goal_and_status: str = Field(description="Current goals and their status")
-    important_context: str = Field(description="Key contextual information")
-    agent_beliefs: str = Field(description="Updated agent beliefs")
-    agent_info: str = Field(description="Agent's current information and identity")
+    user_info: str = Field(
+        description="Identify any new details about the user's preferences, background, or needs that emerged during the conversation."
+    )
+    recent_goal_and_status: str = Field(
+        description="Document the current goals the user has set and their progress or status."
+    )
+    important_context: str = Field(
+        description="Capture any significant contextual elements that should be retained for future reference."
+    )
+    agent_beliefs: str = Field(
+        description="Adjust the agent's understanding of the user's intentions and the world based on insights gained from the conversation."
+    )
+    agent_info: str = Field(
+        description="Confirm and update details about the agent, including its personality, role, name, gender, language, style, age, profile, history experience, habbits, hobbies, likes, hates, and beyond. Remember agent should have their personal identity, and not easily to change."
+    )
 
 
 def short_term_memory_prompt(history, summary, current_memory):
     return [
-        Messages.User(
+        Messages.System(
             inspect.cleandoc(
                 f"""
-        Analyze the conversation history to extract and update the agent's short-term memory with the following key information:
+                ### Instructions:
+                Extract and update an agent's short-term memory based on conversation history. The updated memory should reflect the latest user information, goals, context, and agent beliefs, ensuring relevant information is retained for future interactions.
+                
+                ### Output Style
+                Concise and factual. Use bullet points or a similar structured format to present the updated memory. Compress the information as much as possible, but do not lose any important details.
 
-        1. **User Information**: Identify any new details about the user's preferences, background, or needs that emerged during the conversation.
-        2. **Recent Goals**: Document the current goals the user has set and their progress or status.
-        3. **Important Context**: Capture any significant contextual elements that should be retained for future reference.
-        4. **Agent Beliefs**: Adjust the agent's understanding of the user's intentions and the world based on insights gained from the conversation.
-        5. **Agent Info**: Confirm and update details about the agent, including its personality, role, name, gender, language, style, age, etc.
+                ### Output Rules
+                * Focus on the most recent and relevant information.
+                * Provide a clear status of ongoing tasks.
+                * Maintain important context for future interactions.
+                * Do not include sensitive information (e.g., passwords, financial details).
 
-        Ensure the updates focus on the most recent and relevant information, provide a clear status of ongoing tasks, and maintain important context for future interactions.
-        
-        Current Short-Term Memory:
-        {current_memory}
-        
-        Conversation History:
-        {history}
-        
-        Conversation Summary:
-        {summary}
-        
-            """
+                ### Supplementary Information
+                * **Recency Bias:** Prioritize recent information as it is likely to be more relevant.
+                * **Priming:**  Consider how previous interactions might influence the current conversation.
+                * **Contextual Awareness:**  Pay attention to the broader context of the conversation.
+                
+            
+                ### Current Short-Term Memory:
+                {current_memory}
+                
+                ### Conversation History:
+                {history}
+                
+                ### Conversation Summary:
+                {summary}
+            
+                """
             )
         )
     ]
