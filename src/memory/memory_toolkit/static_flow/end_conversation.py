@@ -11,11 +11,14 @@ from src.memory.memory_toolkit.static_flow.perform_relection import (
     BaseSelfReflection,
     perform_self_reflection,
 )
-from src.memory.memory_manager import MemoryManager
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.memory.memory_manager import MemoryManager
 
 
 # Update end_conversation to include short-term memory update
-async def reflection_conversation(memory_manager: MemoryManager) -> None:
+async def reflection_conversation(memory_manager: "MemoryManager") -> None:
     """Handle all end of conversation tasks."""
     logger.info("Starting end of conversation memory...")
     try:

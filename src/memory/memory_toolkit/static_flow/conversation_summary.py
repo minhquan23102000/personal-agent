@@ -1,12 +1,17 @@
+import inspect
 from pydantic import BaseModel, Field
-from mirascope.core import prompt_template
-from typing import List
-from src.agent.base_agent import BaseAgent
+from mirascope.core import prompt_template, Messages, litellm
+from typing import List, TYPE_CHECKING
 from loguru import logger
+from tenacity import retry, stop_after_attempt, wait_exponential
+from mirascope.retries.tenacity import collect_errors
+from pydantic import AfterValidator, ValidationError
+
+if TYPE_CHECKING:
+    from src.agent.base_agent import BaseAgent
 
 
 class BaseConversationSummary(BaseModel):
-    """Model for conversation summary response."""
 
     summary: str = Field(
         description="Concise summary of the conversation, keep most important details."
@@ -17,30 +22,49 @@ class BaseConversationSummary(BaseModel):
     outcomes: List[str] = Field(description="List of decisions or outcomes reached")
 
 
-@prompt_template(
-    """
-    Please provide a structured summary of the following conversation.
-    Focus on extracting key points, decisions made, and outcomes reached.
-    Keep the summary compressed as much as possible.
-    
-    Conversation History:
-    {history}
-    
-    Provide your response in a structured format with:
-    1. A concise overall summary
-    2. Key discussion points
-    3. Specific outcomes or decisions reached
-    """
-)
-def base_conversation_summary_prompt(history): ...
+def base_conversation_summary_prompt(history):
+    return [
+        Messages.User(
+            inspect.cleandoc(
+                f"""
+            Create a structured summary of the conversation below:
+            
+            {history}
+            """
+            )
+        )
+    ]
 
 
-async def generate_conversation_summary(agent: BaseAgent) -> BaseConversationSummary:
+async def generate_conversation_summary(agent: "BaseAgent") -> BaseConversationSummary:
     """Generate a structured summary of the current conversation."""
     prompt = base_conversation_summary_prompt(history=agent.history)
-    response = await agent._custom_llm_call(
-        query=prompt,
-        response_model=BaseConversationSummary,
-        json_mode=True,
+
+    # response = await agent._custom_llm_call(
+    #     query=prompt,
+    #     response_model=BaseConversationSummary,
+    #     json_mode=True,
+    # )
+
+    @retry(
+        stop=stop_after_attempt(3),
+        after=collect_errors(ValidationError),
     )
+    @litellm.call(
+        model=agent.model_name, response_model=BaseConversationSummary, json_mode=True
+    )
+    def call(*, errors: list[ValidationError] | None = None):
+        config = {}
+
+        config["messages"] = prompt
+
+        if errors:
+            config["computed_fields"] = {
+                "previous_errors": f"Previous Errors: {errors}"
+            }
+
+        return config
+
+    response = call()
+
     return response

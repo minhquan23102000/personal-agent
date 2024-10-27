@@ -37,15 +37,15 @@ class Knowledge(BaseModel):
     knowledge_id: int
     text: str
     entities: List[str]
-    entity_embeddings: List[float]
-    text_embedding: List[float]
-    keywords: List[str]
+    entity_embeddings: List[float] | None = None
+    text_embedding: List[float] | None = None
+    keywords: List[str] | None = None
 
 
 class EntityRelationship(BaseModel):
     relationship_id: int
     relationship_text: str
-    embedding: List[float]
+    embedding: List[float] | None = None
 
 
 class ConversationSummary(BaseModel):

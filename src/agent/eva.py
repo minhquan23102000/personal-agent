@@ -1,10 +1,11 @@
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Type, Callable
 
 from mirascope.core import BaseDynamicConfig, BaseTool, Messages, litellm
 
 from src.agent.base_agent import BaseAgent
 from src.memory import MemoryManager
-from dataclasses import dataclass
+
 from rich import print
 
 
@@ -30,5 +31,3 @@ class Eva(BaseAgent):
     def __post_init__(self):
         self.memory_manager = MemoryManager(db_uri=self.agent_id)
         super().__post_init__()
-
-        self.add_tools([ask_user_for_help])

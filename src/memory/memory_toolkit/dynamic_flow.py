@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from loguru import logger
 from mirascope.core import BaseToolKit, toolkit_tool
 import asyncio
@@ -18,67 +18,91 @@ class DynamicMemoryToolKit(BaseToolKit):
         self,
         knowledge_text: str,
         entities: List[str],
-        keywords: List[str],
         relationship_text: List[str],
     ) -> str:
-        """Store important information in memory for future use. Remember to use this when you want to store important information.
+        """Store Knowledge in Your Long Term Memory. Call this method when you learn new knowledge in the conversation.
+        This method allows you to remember important knowledge and information for future use.
+        It checks if the knowledge already exists in memory to avoid duplicates. If the knowledge
+        is new, it stores the text along with associated entities and their relationships.
+        For Example:
+            result = await dynamic_memory_toolkit.store_knowledge(
+                knowledge_text="Python is a programming language.",
+                entities=["Python", "Programming Language"],
+                relationship_text=["Python is used for web development.", "Python is popular for data science."]
+            )
+            print(result)  # Outputs: Successfully stored knowledge: Python is a programming language.
 
-
-        knowledge_text (str): The main knowledge text content to store. Can be a sentence or a paragraph, or multiple paragraphs. Make sure to it cover all context of the information.
-        entities (List[str]): List of entities identified in the text.
-        keywords (List[str]): List of keywords from the text.
-        relationship_text (List[str]): List of relationship statements (e.g. "Paris is the capital of France").
-
-        Returns:
-            str: Status message about the storage operation
+        Args:
+            self: The DynamicMemoryToolKit instance. Ignore this parameter.
+            knowledge_text (str): The text of the knowledge to be stored.
+            entities (List[str]): A list of entities related to the knowledge.
+            relationship_text (List[str]): A list of relationship descriptions related to the entities.
         """
         try:
             if not self.memory_manager:
                 return "Error: Memory manager not available"
 
             async def _store():
-                # Search similar knowledge if exists return existing knowledge
+
+                return_msg = ""
+                new_relationships = []
+                existing_relationships = []
+
                 similar_knowledge, _ = await self.memory_manager.query_knowledge(
                     query=knowledge_text, threshold=0.9
                 )
                 if similar_knowledge:
-                    return f"Knowledge already exists: {similar_knowledge[0].text}"
-
-                # Get embeddings for text and entities
-                text_embedding = (
-                    await self.memory_manager.embedding_model.get_text_embedding(
-                        knowledge_text
+                    return_msg += (
+                        f"Knowledge already exists: {similar_knowledge[0].text}\n"
                     )
-                )
-
-                entity_text = " ".join(entities)
-                entity_embeddings = (
-                    await self.memory_manager.embedding_model.get_text_embedding(
-                        entity_text
-                    )
-                )
-
-                # Store knowledge
-                await self.memory_manager.store_knowledge(
-                    text=knowledge_text,
-                    entities=entities,
-                    keywords=keywords,
-                    text_embedding=text_embedding,
-                    entity_embeddings=entity_embeddings,
-                )
-
-                # Store entity relationships
-                for rel_text in relationship_text:
-                    rel_embedding = (
+                else:
+                    text_embedding = (
                         await self.memory_manager.embedding_model.get_text_embedding(
-                            rel_text
+                            knowledge_text
                         )
                     )
-                    await self.memory_manager.store_entity_relationship(
-                        relationship_text=rel_text, embedding=rel_embedding
+
+                    entity_text = ", ".join(entities)
+                    entity_embeddings = (
+                        await self.memory_manager.embedding_model.get_text_embedding(
+                            entity_text
+                        )
                     )
 
-                return f"Successfully stored knowledge: {knowledge_text}"
+                    await self.memory_manager.store_knowledge(
+                        text=knowledge_text,
+                        entities=entities,
+                        keywords=entities,
+                        text_embedding=text_embedding,
+                        entity_embeddings=entity_embeddings,
+                    )
+
+                    return_msg += f"Stored new knowledge {knowledge_text} sucessfully."
+
+                for rel_text in relationship_text:
+                    similar_rel, _ = await self.memory_manager.query_entities(
+                        rel_text, threshold=0.9
+                    )
+
+                    if similar_rel:
+                        existing_relationships.append(similar_rel)
+                    else:
+                        rel_embedding = await self.memory_manager.embedding_model.get_text_embedding(
+                            rel_text
+                        )
+
+                        await self.memory_manager.store_entity_relationship(
+                            relationship_text=rel_text, embedding=rel_embedding
+                        )
+                        new_relationships.append(rel_text)
+
+                if new_relationships:
+                    return_msg += f"Stored new entity relationships sucessfully: {new_relationships}\n"
+
+                if existing_relationships:
+                    return_msg += f"Entity relationships already exist: {existing_relationships}\n"
+
+                return return_msg
 
             return await _store()
 
@@ -89,24 +113,27 @@ class DynamicMemoryToolKit(BaseToolKit):
     @toolkit_tool
     async def search_knowledge(self, query: str) -> str:
         """Search for relevant knowledge in memory.
+        This function allows you to search for knowledge entries stored in the memory manager based on a given query. It retrieves relevant knowledge and associated entity relationships, providing a structured response.
+        Ensure that the query is specific enough to yield relevant results.
+        Use keywords that are likely to match the stored knowledge for better search accuracy.
+        Handle the returned string appropriately, especially if it indicates no results were found.
+        For Example:
+            To search for knowledge related to "machine learning", you would call,
+            result = await search_knowledge(query="machine learning")
+            print(result)
 
         Args:
-            query (str): The search query text
-
-        Returns:
-            str: Formatted string containing relevant knowledge and relationships
+            query (str): The search term or phrase used to find relevant knowledge in memory.
         """
         try:
             if not self.memory_manager:
                 return "Error: Memory manager not available"
 
             async def _search():
-                # Query both knowledge and relationships
                 knowledge_entries, relationships = (
                     await self.memory_manager.query_knowledge(query=query)
                 )
 
-                # Format results
                 results = []
                 if knowledge_entries:
                     results.append("Relevant Knowledge:")
@@ -131,25 +158,28 @@ class DynamicMemoryToolKit(BaseToolKit):
     @toolkit_tool
     async def search_entity_relationships(self, entities: List[str]) -> str:
         """Search for relationships between specified entities in memory.
+        This function allows you to find and retrieve relationships between specified entities stored in the memory manager. It provides insights into how entities are connected and any related knowledge that may enhance understanding.
+        Provide a clear and concise list of entities to ensure accurate results.
+        Use entity names that are commonly recognized within the context of your application.
+        Be aware that the function may return no results if the entities are not related or if they do not exist in memory.
+        For Example:
+            To search for relationships between entities "Alice" and "Bob", you would call,
+            result = await search_entity_relationships(entities=["Alice", "Bob"])
+            print(result)
 
         Args:
-            entities (List[str]): List of entities to search relationships for
-
-        Returns:
-            str: Formatted string containing relevant entity relationships
+            entities (List[str]): A list of entity names for which relationships are to be searched. Ensure that the entities are accurately spelled and relevant to the context of the search.
         """
         try:
             if not self.memory_manager:
                 return "Error: Memory manager not available"
 
             async def _search_entities():
-                # Create query from entities
                 query = ", ".join(entities)
                 relationships, related_knowledge = (
                     await self.memory_manager.query_entities(query=query)
                 )
 
-                # Format results
                 results = []
                 if relationships:
                     results.append("Entity Relationships:")
@@ -174,13 +204,6 @@ class DynamicMemoryToolKit(BaseToolKit):
             return f"Error searching relationships: {str(e)}"
 
 
-def get_memory_toolkit(memory_manager: MemoryManager) -> DynamicMemoryToolKit:
-    """Get configured memory toolkit instance.
-
-    Args:
-        memory_manager (MemoryManager): Memory manager instance to use for the toolkit
-
-    Returns:
-        DynamicMemoryToolKit: Configured DynamicMemoryToolKit instance
-    """
+def get_memory_toolkit(memory_manager: "MemoryManager") -> DynamicMemoryToolKit:
+    """Get configured memory toolkit instance."""
     return DynamicMemoryToolKit(memory_manager=memory_manager)

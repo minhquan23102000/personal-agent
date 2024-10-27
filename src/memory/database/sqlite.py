@@ -69,8 +69,8 @@ class SQLiteDatabase(BaseDatabase):
                 # Verify installation
                 (vec_version,) = conn.execute("select vec_version()").fetchone()
                 logger.info(f"sqlite-vec version: {vec_version}")
-
-            asyncio.run(self.initialize())
+                logger.info("Initializing database schema")
+                self.initialize(conn)
         except Exception as e:
             raise RuntimeError(f"Failed to initialize SQLite database: {str(e)}")
 
@@ -85,102 +85,101 @@ class SQLiteDatabase(BaseDatabase):
         finally:
             conn.close()
 
-    async def initialize(self) -> None:
+    def initialize(self, conn: sqlite3.Connection) -> None:
         """Initialize database schema"""
-        async with self.get_connection() as conn:
-            # Add short term memory state table
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS short_term_memory_state (
-                    id INTEGER PRIMARY KEY,
-                    user_info TEXT NOT NULL,
-                    last_conversation_summary TEXT NOT NULL,
-                    recent_goal_and_status TEXT NOT NULL,
-                    important_context TEXT NOT NULL,
-                    agent_beliefs TEXT NOT NULL,
-                    agent_info TEXT NOT NULL,
-                    timestamp DATETIME NOT NULL
-                )
-                """
-            )
-
-            # Create short term memory table
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS conversations (
-                    conversation_id TEXT,
-                    turn_id INTEGER NOT NULL,
-                    timestamp DATETIME NOT NULL,
-                    sender TEXT NOT NULL,
-                    message_content TEXT NOT NULL,
-                    message_type TEXT NOT NULL,
-                    PRIMARY KEY (conversation_id, turn_id)
-                )
+        # Add short term memory state table
+        # Add short term memory state table
+        conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS short_term_memory_state (
+                id INTEGER PRIMARY KEY,
+                user_info TEXT NOT NULL,
+                last_conversation_summary TEXT NOT NULL,
+                recent_goal_and_status TEXT NOT NULL,
+                important_context TEXT NOT NULL,
+                agent_beliefs TEXT NOT NULL,
+                agent_info TEXT NOT NULL,
+                timestamp DATETIME NOT NULL
             )
-
-            # Create knowledge table (without embedding columns)
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS knowledge (
-                    knowledge_id INTEGER PRIMARY KEY,
-                    text TEXT NOT NULL,
-                    entities TEXT NOT NULL,
-                    keywords TEXT NOT NULL
-                )
             """
-            )
+        )
 
-            # Create vector index for knowledge
-            conn.execute(
-                f"""
-                CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_vec USING vec0(
-                    knowledge_id integer primary key,
-                    text_embedding float[{self.connection_config['embedding_size']}],
-                    entity_embeddings float[{self.connection_config['embedding_size']}]
-                )
-                """
-            )
-
-            # Create entities table (without embedding column)
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS entities (
-                    relationship_id INTEGER PRIMARY KEY,
-                    relationship_text TEXT NOT NULL
-                )
+        # Create short term memory table
+        conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS conversations (
+                conversation_id TEXT,
+                turn_id INTEGER NOT NULL,
+                timestamp DATETIME NOT NULL,
+                sender TEXT NOT NULL,
+                message_content TEXT NOT NULL,
+                message_type TEXT NOT NULL,
+                PRIMARY KEY (conversation_id, turn_id)
             )
+        """
+        )
 
-            # Create vector index for entities
-            conn.execute(
-                f"""
-                CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec USING vec0(
-                    relationship_id integer primary key,
-                    embedding float[{self.connection_config['embedding_size']}]
-                )
-                """
-            )
-
-            # Create conversation summary table
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS conversation_summary (
-                    conversation_id INTEGER PRIMARY KEY,
-                    prompt TEXT NOT NULL,
-                    feedback_text TEXT,
-                    example TEXT,
-                    improvement_suggestion TEXT,
-                    improve_prompt TEXT NOT NULL,
-                    reward_score REAL NOT NULL,
-                    conversation_summary TEXT NOT NULL,
-                    timestamp DATETIME NOT NULL,
-                    FOREIGN KEY(conversation_id) REFERENCES short_term_memory(conversation_id)
-                )
+        # Create knowledge table (without embedding columns)
+        conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS knowledge (
+                knowledge_id INTEGER PRIMARY KEY,
+                text TEXT NOT NULL,
+                entities TEXT NOT NULL,
+                keywords TEXT NOT NULL
             )
+        """
+        )
 
-            conn.commit()
+        # Create vector index for knowledge
+        conn.execute(
+            f"""
+            CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_vec USING vec0(
+                knowledge_id integer primary key,
+                text_embedding float[{self.connection_config['embedding_size']}],
+                entity_embeddings float[{self.connection_config['embedding_size']}]
+            )
+            """
+        )
+
+        # Create entities table (without embedding column)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS entities (
+                relationship_id INTEGER PRIMARY KEY,
+                relationship_text TEXT NOT NULL
+            )
+        """
+        )
+
+        # Create vector index for entities
+        conn.execute(
+            f"""
+            CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec USING vec0(
+                relationship_id integer primary key,
+                embedding float[{self.connection_config['embedding_size']}]
+            )
+            """
+        )
+
+        # Create conversation summary table
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversation_summary (
+                conversation_id TEXT PRIMARY KEY,
+                prompt TEXT NOT NULL,
+                feedback_text TEXT,
+                example TEXT,
+                improvement_suggestion TEXT,
+                improve_prompt TEXT NOT NULL,
+                reward_score REAL NOT NULL,
+                conversation_summary TEXT NOT NULL,
+                timestamp DATETIME NOT NULL
+            )
+        """
+        )
+
+        conn.commit()
 
     async def store_conversation(
         self,
@@ -322,7 +321,7 @@ class SQLiteDatabase(BaseDatabase):
             cursor = conn.execute(
                 """
                 SELECT conversation_id, turn_id, timestamp, sender, message_content, message_type
-                FROM short_term_memory
+                FROM conversations
                 WHERE conversation_id = ?
                 ORDER BY turn_id DESC
                 LIMIT ?
@@ -383,9 +382,6 @@ class SQLiteDatabase(BaseDatabase):
                     knowledge_id=row[0],
                     text=row[1],
                     entities=json.loads(row[2]),
-                    keywords=json.loads(row[3]),
-                    text_embedding=row[4],
-                    entity_embeddings=row[5],
                 )
                 for row in rows
             ]
@@ -424,7 +420,6 @@ class SQLiteDatabase(BaseDatabase):
                 EntityRelationship(
                     relationship_id=row[0],
                     relationship_text=row[1],
-                    embedding=json.loads(row[2]),
                 )
                 for row in rows
             ]
@@ -436,9 +431,9 @@ class SQLiteDatabase(BaseDatabase):
         conversation_summary: str,
         improve_prompt: str,
         reward_score: float,
-        feedback_text: Optional[str] = None,
-        example: Optional[str] = None,
-        improvement_suggestion: Optional[str] = None,
+        feedback_text: str = "",
+        example: str = "",
+        improvement_suggestion: str = "",
     ) -> ConversationSummary:
         """Store conversation summary"""
         async with self.get_connection() as conn:

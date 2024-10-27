@@ -1,9 +1,8 @@
-from typing import Optional, List, Tuple, TypeVar, Callable, Generic, Any
+from typing import Optional, List, Tuple, TypeVar, Callable, Generic, Any, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime
 from loguru import logger
 
-from src.agent.base_agent import BaseAgent
 from src.memory.models import (
     ConversationMemory,
     Knowledge,
@@ -17,10 +16,12 @@ from src.memory.embeddings.base import BaseEmbedding
 from src.memory.retrieval.reranker import CrossEncoderReranker
 from src.memory.database.sqlite import SQLiteDatabase
 from src.memory.embeddings.sentence_transformer import SentenceTransformerEmbedding
-from src.memory.memory_toolkit.dynamic_flow import DynamicMemoryToolKit
 from src.memory.memory_toolkit.static_flow.end_conversation import (
     reflection_conversation,
 )
+
+if TYPE_CHECKING:
+    from src.agent.base_agent import BaseAgent
 
 T = TypeVar("T")
 
@@ -64,11 +65,8 @@ class MemoryManager:
         if use_reranker:
             self.reranker = CrossEncoderReranker()
 
-    def set_agent(self, agent: BaseAgent) -> None:
+    def set_agent(self, agent: "BaseAgent") -> None:
         self.agent = agent
-
-    def get_dynamic_memory_toolkit(self) -> DynamicMemoryToolKit:
-        return DynamicMemoryToolKit(memory_manager=self)
 
     async def reflection_conversation(self) -> None:
         await reflection_conversation(memory_manager=self)
