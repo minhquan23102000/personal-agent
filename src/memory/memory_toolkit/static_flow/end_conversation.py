@@ -85,7 +85,7 @@ async def reflection_conversation(
         # Store updated memory
         await memory_manager.store_short_term_memory(
             user_info=memory_updates.user_info,
-            last_conversation_summary=summary_response.summary,
+            last_conversation_summary=summary_str,
             recent_goal_and_status=memory_updates.recent_goal_and_status,
             important_context=memory_updates.important_context,
             agent_beliefs=memory_updates.agent_beliefs,

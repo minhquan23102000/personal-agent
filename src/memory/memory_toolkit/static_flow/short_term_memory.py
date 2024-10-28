@@ -19,7 +19,7 @@ class BaseShortTermMemoryUpdate(BaseModel):
     """Model for short-term memory updates."""
 
     user_info: str = Field(
-        description="Identify any new details about the user's preferences, personality, background, needs, hypothesis about user, or anything else important beyond that emerged during the conversation."
+        description="Identify any new details about the user's preferences, personality, background, needs, styles, habits, beliefs, your relationship with user or anything you understand about user."
     )
     recent_goal_and_status: str = Field(
         description="Document the all the goals the user has set and their progress or status. Should be a list of bullet points in short and concise."
@@ -31,7 +31,7 @@ class BaseShortTermMemoryUpdate(BaseModel):
         description="Adjust the your belife and understanding of the world based on insights gained from the conversation. Should be a list of bullet points."
     )
     agent_info: str = Field(
-        description="How the conversation has changed you? Describe detailed of your personality, role, name, gender, language, style, age, profile, history experience, habbits, hobbies, likes, hates, and anything beyond."
+        description="How the conversation has changed you? Describe detailed of your personality, role, name, gender, language, style, age, profile, historical background, relationship with user and anything beyond."
     )
 
 
@@ -40,7 +40,7 @@ class BaseShortTermMemoryUpdate(BaseModel):
     MESSAGES: {history}
     
     USER:
-    Extract and update your short-term memory based on conversation history. Think of what is important, what is not important. What need to remember or update? And what need to forget or delete. Then write an updated short-term memory.
+    Extract and update your short-term memory based on conversation history. Think of what need to remember or update? And what need to forget or delete. Then write an updated short-term memory.
     
     USER FEEDBACK:
     {user_feedback}
