@@ -41,10 +41,10 @@ class ReasoningAction(pydantic.BaseModel):
     """Thought and action reasoning."""
 
     thought: str = pydantic.Field(
-        description="Your thought, feeling on the current situation, obervation. And plan for the next optimal action, it can be execution of the tools you current have."
+        description="Your thought, feeling on the current situation, obervation."
     )
     action: str = pydantic.Field(
-        description="Provide short and concise next action to take."
+        description="Provide short and concise the most optimal next action to take, or determine the best tools you currently have to address it effectively (if any)."
     )
     send_message_to_human: bool = pydantic.Field(
         description="Return True if the next action will be to send a message to the user. False otherwise."
@@ -314,6 +314,7 @@ class BaseAgent:
                 await self.store_turn_message(
                     Messages.Assistant(formatted_reasoning_response), "assistant"
                 )
+                time.sleep(1)
 
                 # action step
                 response = await self._default_llm_call(
@@ -325,6 +326,8 @@ class BaseAgent:
                 if tools := response.tools:
                     await self._process_tools(tools, response)
                     # return await self.step("")  # Continue the conversation
+
+                time.sleep(1)
 
             # # reach out to human with final response
             # response = await self._default_llm_call(query)
