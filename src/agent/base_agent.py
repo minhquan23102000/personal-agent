@@ -22,7 +22,7 @@ from mirascope.core.openai import OpenAICallResponse
 from tenacity import retry, stop_after_attempt, wait_exponential
 from mirascope.retries.tenacity import collect_errors
 from pydantic import AfterValidator, ValidationError
-
+import pydantic
 from src.memory.memory_manager import MemoryManager
 from src.memory.models import MessageType, ShortTermMemory
 from src.memory.memory_toolkit.dynamic_flow import get_memory_toolkit
@@ -35,6 +35,18 @@ import rich
 def generate_agent_id() -> str:
     random_id = str(uuid.uuid4())
     return hashlib.sha256(random_id.encode()).hexdigest()[:8]
+
+
+class ReasoningAction(pydantic.BaseModel):
+    """Thought and action reasoning."""
+
+    thought: str = pydantic.Field(
+        description="Your thought on the current situation, obervation."
+    )
+    action: str = pydantic.Field(
+        description="The next optimal action to take. Or 'reach out to human' when their are no next action to take or you need to reach out to human."
+    )
+    reach_to_human: bool = pydantic.Field(description="Whether to reach out to human.")
 
 
 async def send_message_to_human(message: str) -> str:
@@ -55,7 +67,9 @@ class BaseAgent:
 
     default_model_name: str = "gemini/gemini-1.5-flash-002"
     slow_model_name: str = "gemini/gemini-1.5-pro-002"
-    history: List[BaseMessageParam | Messages.Type] = field(default_factory=list)
+    history: List[BaseMessageParam | Messages.Type | OpenAICallResponse] = field(
+        default_factory=list
+    )
     max_history: Optional[int] = None
     system_prompt: str = "You are an AI agent."
     temperature: float = 0.5
@@ -141,8 +155,11 @@ class BaseAgent:
         return config
 
     def convert_message_to_base_message_param(
-        self, message: Messages.Type | str | dict, role: str
+        self, message: BaseMessageParam | Messages.Type | str | dict, role: str
     ) -> BaseMessageParam:
+        if isinstance(message, BaseMessageParam):
+            return message
+
         if isinstance(message, dict):
             return BaseMessageParam(
                 role=role,
@@ -213,6 +230,32 @@ class BaseAgent:
                 api_key = self.rotating_api_keys.rotate()
                 os.environ[self.api_key_env_var] = api_key
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+    )
+    @litellm.call(model=default_model_name)
+    @prompt_template(
+        """
+        MESSAGES: {self.history}
+        
+        USER:
+        Do not act, just first analyze the current situation and observations, then recommend the most effective action to take based on your assessment.
+        
+        OBSERVATION: {current_observation}
+        
+        YOUR THOUGHT AND ACTION:
+        """
+    )
+    async def _reasoning_action(
+        self, query: Messages.Type, observation: Messages.Type | None = None
+    ) -> BaseDynamicConfig:
+        """Reasoning about the action to take."""
+        self.rotate_api_key()
+        current_observation = observation or query
+
+        return {"computed_fields": {"current_observation": current_observation}}
+
     async def _default_llm_call(
         self,
         query: Messages.Type,
@@ -243,6 +286,7 @@ class BaseAgent:
         """Execute one step of the agent's reasoning process."""
         try:
             await self.store_turn_message(query, "user")
+            self.history.append(query)
             response = await self._default_llm_call(query)
 
             if tools := getattr(response, "tools", None):
@@ -250,6 +294,8 @@ class BaseAgent:
                 return await self.step("")  # Continue the conversation
 
             await self.store_turn_message(response.content, "assistant")
+
+            self.history.append(response)
 
             return response.content
 
@@ -273,7 +319,9 @@ class BaseAgent:
                 if query.lower() in ["exit", "quit"]:
                     break
 
+                query = Messages.User(query)
                 print("[Assistant]: ", end="", flush=True)
+
                 response = await self.step(query)
                 print(response)
 

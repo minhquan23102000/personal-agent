@@ -20,7 +20,17 @@ class DynamicMemoryToolKit(BaseToolKit):
         entities: List[str],
         relationship_text: List[str],
     ) -> str:
-        """Whenever you encounter new, important information during our conversation, save it to your long-term memory using the provided 'Store Knowledge' method. This ensures the information is retained even across different conversations or sessions. To store knowledge, provide the text you want to remember, a list of relevant entities associated with it, and descriptions of how those entities relate to each other."""
+        """Save important information to your long-term memory. Whenever you ensures the information is retained even across different conversations or sessions and for long term benefit.
+
+        You can use this function in following scenarios:
+        - When you learn something new
+        - When you have a realization
+        - When you have a new idea
+        - When you have a new feeling
+        - When you encounter important information.
+
+        To store knowledge, provide the text you want to remember, a list of relevant entities associated with it, and descriptions of how those entities relate to each other.
+        """
 
         try:
             if not self.memory_manager:
@@ -96,7 +106,16 @@ class DynamicMemoryToolKit(BaseToolKit):
 
     @toolkit_tool
     async def search_knowledge(self, query: str) -> str:
-        """Retrieve relevant information from the conversation history based on the provided query. This function helps answer user questions or recall crucial details mentioned earlier. Search the knowledge base using the given query to locate pertinent information and any associated entities."""
+        """Retrieve and search relevant knowledge from your long-term memory.
+
+        You can use this function in following scenarios:
+        - When you need to recall important information
+        - When you need to find a specific fact
+        - When you need to find related information
+        - When you think that your current memory is incomplete or lacking knowledge to complete a task or answer a question.
+
+        Search the knowledge base using the given query to locate pertinent information and any associated entities.
+        """
         try:
             if not self.memory_manager:
                 return "Error: Memory manager not available"
@@ -129,11 +148,15 @@ class DynamicMemoryToolKit(BaseToolKit):
 
     @toolkit_tool
     async def search_entity_relationships(self, entities: List[str]) -> str:
-        """Retrieve relationships between specified entities in memory by providing a clear and concise list of commonly recognized entity names. Use this when entities are mentioned in the conversation.
-        For example, to find connections between 'Alice' and 'Bob', search_entity_relationships(entities=['Alice', 'Bob'])
+        """Retrieve and search knowledge of entities orrelationships between entities.
 
-        Args:
-            entities (List[str]): A list of entity names for which relationships are to be searched. Ensure that the entities are accurately spelled and relevant to the context of the search.
+        You can use this function in following scenarios:
+        - When you need to find connections between entities
+        - When you need to find relationships between entities
+        - When you need to find information, knowledge or facts about entities
+        - When you think that your current memory is incomplete or lacking knowledge to complete a task or answer a question.
+
+        To search for relationships between entities, provide a list of entity names.
         """
         try:
             if not self.memory_manager:
@@ -167,6 +190,53 @@ class DynamicMemoryToolKit(BaseToolKit):
         except Exception as e:
             logger.error(f"Error searching relationships: {e}")
             return f"Error searching relationships: {str(e)}"
+
+    @toolkit_tool
+    async def remember_entities_relationship(
+        self,
+        entities: List[str],
+        relationship_text: str,
+    ) -> str:
+        """Store relationships between entities in your long-term memory.
+
+        You can use this function in following scenarios:
+        - When you discover connections between entities
+        - When you learn how entities are related to each other
+        - When you want to explicitly store relationships without associated knowledge
+        - When you need to update or add new relationships between known entities
+
+        To use this tool, provide a list of entity names and a description of how the entities are related.
+        """
+        try:
+            if not self.memory_manager:
+                return "Error: Memory manager not available"
+
+            async def _store_relationship():
+                similar_rel, _ = await self.memory_manager.query_entities(
+                    relationship_text, threshold=0.95
+                )
+
+                if similar_rel:
+                    return f"Relationship already exists: {similar_rel[0].relationship_text}"
+
+                rel_embedding = (
+                    await self.memory_manager.embedding_model.get_text_embedding(
+                        relationship_text
+                    )
+                )
+
+                await self.memory_manager.store_entity_relationship(
+                    relationship_text=relationship_text,
+                    embedding=rel_embedding,
+                )
+
+                return f"Successfully stored relationship between entities {', '.join(entities)}: {relationship_text}"
+
+            return await _store_relationship()
+
+        except Exception as e:
+            logger.error(f"Error storing entity relationship: {e}")
+            return f"Error storing entity relationship: {str(e)}"
 
 
 def get_memory_toolkit(memory_manager: "MemoryManager") -> DynamicMemoryToolKit:
