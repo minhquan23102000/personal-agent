@@ -13,8 +13,6 @@ from src.memory.memory_toolkit.static_flow.perform_relection import (
 )
 from typing import TYPE_CHECKING
 
-from rich.console import Console
-from rich.markdown import Markdown
 
 if TYPE_CHECKING:
     from src.memory.memory_manager import MemoryManager
@@ -31,8 +29,8 @@ async def reflection_conversation(memory_manager: "MemoryManager") -> None:
         summary_response = await generate_conversation_summary(memory_manager.agent)
         reflection_response = await perform_self_reflection(memory_manager.agent)
 
-        logger.info(f"Summary: {summary_response}")
-        logger.info(f"Reflection: {reflection_response}")
+        logger.info(f"Summary: {summary_response}\n\n")
+        logger.info(f"Reflection: {reflection_response}\n\n")
 
         # 2. Store conversation summary and improvements
         await memory_manager.store_conversation_summary(
@@ -43,6 +41,7 @@ async def reflection_conversation(memory_manager: "MemoryManager") -> None:
             reward_score=reflection_response.reward_score,
             feedback_text="\n".join(
                 [
+                    reflection_response.critique,
                     "Strengths:",
                     *[f"- {s}" for s in reflection_response.strengths],
                     "\nAreas for Improvement:",

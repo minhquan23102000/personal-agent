@@ -19,58 +19,31 @@ class BaseShortTermMemoryUpdate(BaseModel):
     """Model for short-term memory updates."""
 
     user_info: str = Field(
-        description="Identify any new details about the user's preferences, background, or needs that emerged during the conversation."
+        description="Identify any new details about the user's preferences, personality, background, needs, hypothesis about user, or anything else important beyond that emerged during the conversation. Should be a list of bullet points. Should be compressed as much as possible."
     )
     recent_goal_and_status: str = Field(
-        description="Document the current goals the user has set and their progress or status."
+        description="Document the current goals the user has set and their progress or status. Should be a list of bullet points. Should be compressed as much as possible."
     )
     important_context: str = Field(
-        description="Capture any significant contextual elements that should be retained for future reference."
+        description="Capture any significant contextual elements that should be retained for future reference. Should be compressed as much as possible. Should be a list of bullet points."
     )
     agent_beliefs: str = Field(
-        description="Adjust the agent's understanding of the user's intentions and the world based on insights gained from the conversation."
+        description="Adjust the your understanding of the user's intentions and the world based on insights gained from the conversation. What you have learned about the user and the world? Should be a list of bullet points. Should be compressed as much as possible."
     )
     agent_info: str = Field(
-        description="Confirm and update details about the agent, including its personality, role, name, gender, language, style, age, profile, history experience, habbits, hobbies, likes, hates, and beyond. Remember agent should have their personal identity, and not easily to change."
+        description="How the conversation has changed you? An updated of your personality, role, name, gender, language, style, age, profile, history experience, habbits, hobbies, likes, hates, and anything beyond. Should be a list of bullet points. Should be compressed as much as possible."
     )
 
 
-def short_term_memory_prompt(history, summary, current_memory):
-    return [
-        Messages.System(
-            inspect.cleandoc(
-                f"""
-                ### Instructions:
-                Extract and update an agent's short-term memory based on conversation history. The updated memory should reflect the latest user information, goals, context, and agent beliefs, ensuring relevant information is retained for future interactions.
-                
-                ### Output Style
-                Concise and factual. Use bullet points or a similar structured format to present the updated memory. Compress the information as much as possible, but do not lose any important details.
-
-                ### Output Rules
-                * Focus on the most recent and relevant information.
-                * Provide a clear status of ongoing tasks.
-                * Maintain important context for future interactions.
-                * Do not include sensitive information (e.g., passwords, financial details).
-
-                ### Supplementary Information
-                * **Recency Bias:** Prioritize recent information as it is likely to be more relevant.
-                * **Priming:**  Consider how previous interactions might influence the current conversation.
-                * **Contextual Awareness:**  Pay attention to the broader context of the conversation.
-                
-            
-                ### Current Short-Term Memory:
-                {current_memory}
-                
-                ### Conversation History:
-                {history}
-                
-                ### Conversation Summary:
-                {summary}
-            
-                """
-            )
-        )
-    ]
+@prompt_template(
+    """
+    MESSAGES: {history}
+    
+    USER:
+    Extract and update your short-term memory based on conversation history. Think of what is important, what is not important. Then write an updated short-term memory.
+    """
+)
+def short_term_memory_prompt(history, current_memory): ...
 
 
 async def generate_updated_short_term_memory(
@@ -80,7 +53,6 @@ async def generate_updated_short_term_memory(
     try:
         prompt = short_term_memory_prompt(
             history=agent.history,
-            summary=summary,
             current_memory=agent.short_term_memory,
         )
 
@@ -96,11 +68,7 @@ async def generate_updated_short_term_memory(
         def call(*, errors: list[ValidationError] | None = None):
             config = {}
 
-            config["messages"] = short_term_memory_prompt(
-                history=agent.history,
-                summary=summary,
-                current_memory=agent.short_term_memory,
-            )
+            config["messages"] = prompt
 
             if errors:
                 config["computed_fields"] = {

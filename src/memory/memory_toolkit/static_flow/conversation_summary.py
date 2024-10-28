@@ -22,18 +22,15 @@ class BaseConversationSummary(BaseModel):
     outcomes: List[str] = Field(description="List of decisions or outcomes reached")
 
 
-def base_conversation_summary_prompt(history):
-    return [
-        Messages.System(
-            inspect.cleandoc(
-                f"""
-            Create a structured summary of the conversation below. The information should be compressed as much as possible while still retaining the most important details.
-            
-            {history}
-            """
-            )
-        )
-    ]
+@prompt_template(
+    """
+    MESSAGES: {history}
+    
+    USER:
+    Create a structured summary of the conversation above. The information should be compressed as much as possible.
+    """
+)
+def base_conversation_summary_prompt(history): ...
 
 
 async def generate_conversation_summary(agent: "BaseAgent") -> BaseConversationSummary:

@@ -25,49 +25,41 @@ if TYPE_CHECKING:
 class BaseSelfReflection(BaseModel):
     """Model for self-reflection response."""
 
-    strengths: List[str] = Field(description="What worked well in the conversation")
-    areas_for_improvement: List[str] = Field(description="What could be improved")
-    specific_examples: List[str] = Field(
-        description="Concrete examples from the conversation"
+    critique: str = Field(
+        description="Critique of the conversation and your performance"
     )
     reward_score: float = Field(
         description="Performance score from 0-10",
         ge=0,
         le=10,
     )
+    strengths: List[str] = Field(description="What worked well in the conversation")
+    areas_for_improvement: List[str] = Field(description="What could be improved")
+    specific_examples: List[str] = Field(
+        description="Concrete examples from the conversation"
+    )
+
     improved_prompt: str = Field(
         description="Enhanced system prompt addressing identified issues"
     )
 
 
-def base_self_reflection_prompt(system_prompt, history):
-    return [
-        Messages.System(
-            inspect.cleandoc(
-                f"""
-                
-                ### Instructions:
-                Analyze the provided conversation by evaluating its performance on a scale of 0-10, focusing on task completion, user satisfaction, information accuracy, and conversation flow, human-like conversation, and overall helpfulness. Identify strengths and successes, as well as areas for improvement. Provide specific examples from the conversation to illustrate your points. Finally, suggest an improved system prompt that addresses any identified issues.
-                
-                * Focus on providing actionable and constructive feedback.
-                * The revised system prompt must be directly relevant to the identified areas for improvement
-                * Analytical, objective, detailed, and specific. Use clear and concise language, avoiding jargon.
-                * Evaluation should be based on observable evidence from the conversation.
-                
-                ### Supplementary Information:
-                * **First Principles Thinking:**  Break down the conversation into its fundamental components (user intent, LLM response, information exchange) to identify core issues.
-                * **Occam's Razor:** Favor simpler explanations and solutions when addressing areas for improvement.
-                * **User-Centered Design:** Prioritize the user's needs and expectations throughout the analysis and prompt revision.
-                * **Cognitive Biases:** Be mindful of potential biases in the conversation and strive for an objective evaluation.  Consider how biases might affect both the user and the LLM.
-                * **User Experience Design:** Consider using principles from user experience design, communication theory, and AI interaction standards to enhance evaluation accuracy and depth.
-               
-                
-                Current System Prompt: {system_prompt}
-                Conversation Logs: {history}
-                """
-            )
-        )
-    ]
+@prompt_template(
+    """
+    MESSAGES: {history}
+    
+    USER:
+    Your curent system prompt: 
+    
+    <Start of System Prompt>
+    {system_prompt}
+    <End of System Prompt>
+    
+    Your task:
+    Analyze the provided conversation history and your system prompt. Evaluating your performance in the conversation on a scale of 0-10. Identify strengths and successes, as well as areas for improvement. Specific examples from the conversation to illustrate your points. Finally, suggest an improved system prompt that addresses any identified issues.
+    """
+)
+def base_self_reflection_prompt(system_prompt, history): ...
 
 
 async def perform_self_reflection(agent: "BaseAgent") -> BaseSelfReflection:

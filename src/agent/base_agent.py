@@ -15,7 +15,9 @@ from mirascope.core import (
     Messages,
     prompt_template,
     litellm,
+    openai,
 )
+
 from mirascope.core.openai import OpenAICallResponse
 from tenacity import retry, stop_after_attempt, wait_exponential
 from mirascope.retries.tenacity import collect_errors
@@ -26,6 +28,8 @@ from src.memory.models import MessageType, ShortTermMemory
 from src.memory.memory_toolkit.dynamic_flow import get_memory_toolkit
 from src.util.rotating_list import RotatingList
 import os
+from rich import print
+import rich
 
 
 def generate_agent_id() -> str:
@@ -50,7 +54,7 @@ class BaseAgent:
     """Base class for all agents with memory integration."""
 
     model_name: str = "gemini/gemini-1.5-flash-002"
-    history: List[Messages.Type] = field(default_factory=list)
+    history: List[BaseMessageParam | Messages.Type] = field(default_factory=list)
     max_history: Optional[int] = None
     system_prompt: str = "You are an AI agent."
     temperature: float = 0.5
@@ -104,75 +108,6 @@ class BaseAgent:
             else:
                 return [*messages, query]
 
-    async def _update_history(
-        self, query: Messages.Type, response: OpenAICallResponse
-    ) -> None:
-        """Update conversation history with new messages and store in memory."""
-        try:
-            if isinstance(query, str):
-                query_message = Messages.User(query)
-            else:
-                query_message = query
-
-            self.history.append(query_message)
-            response_message = None
-            try:
-                response_message = response.message_param
-            except Exception as e:
-                logger.error(f"Error getting response message: {e}.")
-
-            if response_message:
-                self.history.append(response_message)
-
-            if self.max_history and len(self.history) > self.max_history:
-                self.history = self.history[-self.max_history :]
-
-            if self.memory_manager:
-                await self._store_messages_in_memory(query, response_message)
-
-        except Exception as e:
-            logger.error(f"Error updating history: {e}")
-            logger.warning("Continuing conversation without storing messages")
-
-    async def _store_messages_in_memory(
-        self,
-        message: Messages.Type,
-        assistant_message: Optional[BaseMessageParam] | dict,
-    ) -> None:
-        """Store messages in memory if available."""
-        if self.memory_manager:
-            if isinstance(message, str):
-                sender = "user"
-            else:
-                sender = message.role
-                message = str(message.content)
-
-            await self.memory_manager.store_conversation(
-                sender=sender,
-                message_content=message,
-                message_type=MessageType.TEXT,
-                conversation_id=self.conversation_id,
-            )
-
-            if assistant_message:
-                try:
-                    if isinstance(assistant_message, dict):
-                        assistant_message = BaseMessageParam(
-                            role=assistant_message["role"],
-                            content=str(assistant_message["tool_calls"]),
-                        )
-
-                    await self.memory_manager.store_conversation(
-                        sender=assistant_message.role,
-                        message_content=str(assistant_message.content),
-                        message_type=MessageType.TEXT,
-                        conversation_id=self.conversation_id,
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Error storing assistant message in memory: {e}. Message: {assistant_message}"
-                    )
-
     def _build_call_config(
         self,
         query: Messages.Type,
@@ -204,36 +139,68 @@ class BaseAgent:
 
         return config
 
+    def convert_message_to_base_message_param(
+        self, message: Messages.Type | str | dict, role: str
+    ) -> BaseMessageParam:
+        if isinstance(message, dict):
+            return BaseMessageParam(
+                role=role,
+                content=str(message["tool_calls"]),
+            )
+
+        return BaseMessageParam(role=role, content=str(message))
+
+    async def store_turn_message(
+        self,
+        message: Messages.Type | str | dict,
+        role: str = "assistant",
+        message_type: MessageType = MessageType.TEXT,
+    ) -> None:
+        """Store a single turn message in memory."""
+        if self.memory_manager:
+            message = self.convert_message_to_base_message_param(message, role)
+
+            await self.memory_manager.store_conversation(
+                sender=message.role,
+                message_content=str(message.content),
+                message_type=message_type,
+                conversation_id=self.conversation_id,
+            )
+
     async def _process_tools(
         self, tools: List[BaseTool], response: OpenAICallResponse
     ) -> None:
         """Process and execute tools called by the agent."""
-        try:
-            tools_and_outputs = []
-            for tool in tools:
-                logger.info(f"Calling Tool '{tool._name()}' with args {tool.args}")
+
+        tools_and_outputs = []
+        for tool in tools:
+            print(f"Calling Tool '{tool._name()}' with args {tool.args}")
+            output = None
+            try:
                 output = await tool.call()
-                logger.info(f"Tool output: {output}")
-                tools_and_outputs.append((tool, output))
+            except ValidationError as e:
+                output = f"Error calling tool {tool._name()} invalid input: {e}"
+            except Exception as e:
+                output = f"Error calling tool {tool._name()}: {e}"
 
-            tool_messages = getattr(response, "tool_message_params", None)
-            if tool_messages and callable(tool_messages):
-                messages = tool_messages(tools_and_outputs)
-                self.history.extend(messages)
+            print(f"Tool output: {output}")
+            tools_and_outputs.append((tool, output))
 
-                if self.memory_manager:
-                    await self._store_tool_interactions(messages)
-        except Exception as e:
-            logger.error(f"Error processing tools: {e}")
-            raise
+        tool_messages = response.tool_message_params
 
-    async def _store_tool_interactions(self, messages: List[BaseMessageParam]) -> None:
+        messages = tool_messages(tools_and_outputs)
+        self.history.extend(messages)
+
+        if self.memory_manager:
+            await self._store_tool_interactions(messages)
+
+    async def _store_tool_interactions(self, messages: List) -> None:
         """Store tool interactions in memory."""
         if self.memory_manager:
             for msg in messages:
                 await self.memory_manager.store_conversation(
                     sender="Tool",
-                    message_content=str(msg),
+                    message_content=f"{msg.tool_name}: {msg.content}",
                     message_type=MessageType.TOOL,
                     conversation_id=self.conversation_id,
                 )
@@ -248,10 +215,10 @@ class BaseAgent:
         """Make a call to the LLM using litellm."""
         config = self._build_call_config(query, call_params, errors=errors)
 
-        # @retry(
-        #     stop=stop_after_attempt(3),
-        #     wait=wait_exponential(multiplier=1, min=4, max=10),
-        # )
+        @retry(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=4, max=10),
+        )
         @litellm.call(model=self.model_name)
         async def lite_llm_call():
             # Rotate api key after each call
@@ -264,64 +231,44 @@ class BaseAgent:
 
         return await lite_llm_call()
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        after=collect_errors(ValidationError),
-    )
     async def step(
-        self, query: Messages.Type, *, errors: list[ValidationError] | None = None
+        self,
+        query: Messages.Type,
     ):
         """Execute one step of the agent's reasoning process."""
         try:
-            response = await self._default_llm_call(query, errors=errors)
+            await self.store_turn_message(query, "user")
+            response = await self._default_llm_call(query)
 
             if tools := getattr(response, "tools", None):
                 await self._process_tools(tools, response)
                 return await self.step("")  # Continue the conversation
 
-            await self._update_history(query, response)
+            await self.store_turn_message(response.content, "assistant")
 
-            return str(getattr(response, "content", "")) if response else response
+            return response.content
 
         except Exception as e:
             config = self._build_call_config(query)
             logger.error(
                 f"Error in agent step: {e}. Traceback: {traceback.format_exc()}."
             )
-            logger.error(f"Formatted Config: {json.dumps(config, indent=4)}")
+            print(f"Formatted Config: {json.dumps(config, indent=4)}")
 
             raise e
 
-    async def run(self, as_chat: bool = True) -> None:
+    async def run(self) -> None:
         """Run the agent in an interactive loop."""
         try:
             await self.initialize_conversation()
-            if not as_chat:
-                self.add_tools([send_message_to_human])
-
-            first_time = True
 
             while True:
-                if as_chat:
-                    query = input("User: ")
-                    if query.lower() in ["exit", "quit"]:
-                        break
-                else:
-                    if first_time:
-                        query = (
-                            "Note: this is an auto message, send by an system operator. "
-                            " You are currently operating independently, evaluate the situation and determine the optimal next steps."
-                            " Call 'send_message_to_human' tool to communicate with the human when necessary."
-                        )
-                        first_time = False
+                print("[User]: ", end="", flush=True)
+                query = input("")
+                if query.lower() in ["exit", "quit"]:
+                    break
 
-                    else:
-                        query = ""
-
-                    time.sleep(1)
-
-                print("Assistant: ", end="", flush=True)
+                print("[Assistant]: ", end="", flush=True)
                 response = await self.step(query)
                 print(response)
 
