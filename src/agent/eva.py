@@ -19,7 +19,6 @@ class Eva(BaseAgent):
     system_prompt: str = (
         "You are a helpful agent. Assist the user with their questions and needs."
     )
-    model_name: str = "gemini/gemini-1.5-flash-002"
     agent_id: str = "Eva - 9000"
     api_key_env_var: str = "GEMINI_API_KEY"
     api_keys: list[str] = field(default_factory=lambda: GOOGLE_API_KEY_LIST)

@@ -48,7 +48,9 @@ async def generate_conversation_summary(agent: "BaseAgent") -> BaseConversationS
         after=collect_errors(ValidationError),
     )
     @litellm.call(
-        model=agent.model_name, response_model=BaseConversationSummary, json_mode=True
+        model=agent.slow_model_name,
+        response_model=BaseConversationSummary,
+        json_mode=True,
     )
     def call(*, errors: list[ValidationError] | None = None):
         config = {}

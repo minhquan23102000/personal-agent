@@ -47,7 +47,7 @@ def short_term_memory_prompt(history, current_memory): ...
 
 
 async def generate_updated_short_term_memory(
-    agent: "BaseAgent", summary: BaseConversationSummary
+    agent: "BaseAgent", summary: str
 ) -> BaseShortTermMemoryUpdate:
     """Get updated short-term memory state after conversation."""
     try:
@@ -61,7 +61,7 @@ async def generate_updated_short_term_memory(
             after=collect_errors(ValidationError),
         )
         @litellm.call(
-            model=agent.model_name,
+            model=agent.slow_model_name,
             response_model=BaseShortTermMemoryUpdate,
             json_mode=True,
         )
@@ -78,6 +78,8 @@ async def generate_updated_short_term_memory(
             return config
 
         response = call()
+
+        response.important_context += f"\n\nLast conversation summary: {summary}"
 
         return response
     except Exception as e:

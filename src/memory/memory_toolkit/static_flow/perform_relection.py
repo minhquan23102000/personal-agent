@@ -71,7 +71,9 @@ async def perform_self_reflection(agent: "BaseAgent") -> BaseSelfReflection:
             after=collect_errors(ValidationError),
         )
         @litellm.call(
-            model=agent.model_name, response_model=BaseSelfReflection, json_mode=True
+            model=agent.slow_model_name,
+            response_model=BaseSelfReflection,
+            json_mode=True,
         )
         def call(*, errors: list[ValidationError] | None = None):
             config = {}

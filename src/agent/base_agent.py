@@ -53,7 +53,8 @@ async def send_message_to_human(message: str) -> str:
 class BaseAgent:
     """Base class for all agents with memory integration."""
 
-    model_name: str = "gemini/gemini-1.5-flash-002"
+    default_model_name: str = "gemini/gemini-1.5-flash-002"
+    slow_model_name: str = "gemini/gemini-1.5-pro-002"
     history: List[BaseMessageParam | Messages.Type] = field(default_factory=list)
     max_history: Optional[int] = None
     system_prompt: str = "You are an AI agent."
@@ -205,6 +206,13 @@ class BaseAgent:
                     conversation_id=self.conversation_id,
                 )
 
+    def rotate_api_key(self) -> None:
+        """Rotate the api key."""
+        if self.rotating_api_keys:
+            if self.api_key_env_var:
+                api_key = self.rotating_api_keys.rotate()
+                os.environ[self.api_key_env_var] = api_key
+
     async def _default_llm_call(
         self,
         query: Messages.Type,
@@ -219,13 +227,10 @@ class BaseAgent:
             stop=stop_after_attempt(3),
             wait=wait_exponential(multiplier=1, min=4, max=10),
         )
-        @litellm.call(model=self.model_name)
+        @litellm.call(model=self.default_model_name)
         async def lite_llm_call():
             # Rotate api key after each call
-            if self.rotating_api_keys:
-                if self.api_key_env_var:
-                    api_key = self.rotating_api_keys.rotate()
-                    os.environ[self.api_key_env_var] = api_key
+            self.rotate_api_key()
 
             return config
 

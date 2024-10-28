@@ -1,3 +1,4 @@
+import inspect
 from loguru import logger
 from src.memory.memory_toolkit.static_flow.conversation_summary import (
     BaseConversationSummary,
@@ -18,6 +19,16 @@ if TYPE_CHECKING:
     from src.memory.memory_manager import MemoryManager
 
 
+def format_summary(summary: BaseConversationSummary) -> str:
+    return inspect.cleandoc(
+        f"""
+        Summary: {summary.summary}.
+        Key Points: {"\n -".join(summary.key_points)}
+        Outcomes: {"\n -".join(summary.outcomes)}
+        """
+    )
+
+
 # Update end_conversation to include short-term memory update
 async def reflection_conversation(memory_manager: "MemoryManager") -> None:
     """Handle all end of conversation tasks."""
@@ -27,16 +38,20 @@ async def reflection_conversation(memory_manager: "MemoryManager") -> None:
 
         # 1. Generate conversation summary and reflection
         summary_response = await generate_conversation_summary(memory_manager.agent)
-        reflection_response = await perform_self_reflection(memory_manager.agent)
+        summary_str = format_summary(summary_response)
+        memory_manager.agent.rotate_api_key()
 
-        logger.info(f"Summary: {summary_response}\n\n")
+        reflection_response = await perform_self_reflection(memory_manager.agent)
+        memory_manager.agent.rotate_api_key()
+
+        logger.info(f"Summary: {summary_str}\n\n")
         logger.info(f"Reflection: {reflection_response}\n\n")
 
         # 2. Store conversation summary and improvements
         await memory_manager.store_conversation_summary(
             conversation_id=memory_manager.agent.conversation_id,
             prompt=memory_manager.agent.system_prompt,
-            conversation_summary=str(summary_response),
+            conversation_summary=summary_str,
             improve_prompt=reflection_response.improved_prompt,
             reward_score=reflection_response.reward_score,
             feedback_text="\n".join(
@@ -55,9 +70,11 @@ async def reflection_conversation(memory_manager: "MemoryManager") -> None:
 
         # 3. Update short-term memory
         memory_updates = await generate_updated_short_term_memory(
-            summary=summary_response,
+            summary=summary_str,
             agent=memory_manager.agent,
         )
+        memory_manager.agent.rotate_api_key()
+
         logger.info(f"Memory Updates: {memory_updates}")
 
         # Store updated memory
