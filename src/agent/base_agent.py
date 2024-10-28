@@ -18,7 +18,7 @@ from mirascope.core import (
     openai,
 )
 
-from mirascope.core.openai import OpenAICallResponse
+from mirascope.core.openai import OpenAICallResponse, OpenAITool
 from tenacity import retry, stop_after_attempt, wait_exponential
 from mirascope.retries.tenacity import collect_errors
 from pydantic import AfterValidator, ValidationError
@@ -41,12 +41,14 @@ class ReasoningAction(pydantic.BaseModel):
     """Thought and action reasoning."""
 
     thought: str = pydantic.Field(
-        description="Your thought on the current situation, obervation."
+        description="Your thought, feeling on the current situation, obervation. And plan for the next optimal action, it can be execution of the tools you current have."
     )
     action: str = pydantic.Field(
-        description="The next optimal action to take. Or 'reach out to human' when their are no next action to take or you need to reach out to human."
+        description="Provide short and concise next action to take."
     )
-    reach_to_human: bool = pydantic.Field(description="Whether to reach out to human.")
+    send_message_to_human: bool = pydantic.Field(
+        description="Return True if the next action will be to send a message to the user. False otherwise."
+    )
 
 
 async def send_message_to_human(message: str) -> str:
@@ -65,7 +67,7 @@ async def send_message_to_human(message: str) -> str:
 class BaseAgent:
     """Base class for all agents with memory integration."""
 
-    default_model_name: str = "gemini/gemini-1.5-flash-002"
+    default_model_name: str = "gemini/gemini-1.5-pro-002"
     slow_model_name: str = "gemini/gemini-1.5-pro-002"
     history: List[BaseMessageParam | Messages.Type | OpenAICallResponse] = field(
         default_factory=list
@@ -95,6 +97,13 @@ class BaseAgent:
                 raise ValueError("Api key env var is not set")
 
             self.rotating_api_keys = RotatingList(self.api_keys)
+
+    def rotate_api_key(self) -> None:
+        """Rotate the api key."""
+        if self.rotating_api_keys:
+            if self.api_key_env_var:
+                api_key = self.rotating_api_keys.rotate()
+                os.environ[self.api_key_env_var] = api_key
 
     def add_tools(self, tools: List[Union[Type[BaseTool], Callable]]) -> None:
         self.tools.extend(tools)
@@ -176,7 +185,11 @@ class BaseAgent:
     ) -> None:
         """Store a single turn message in memory."""
         if self.memory_manager:
-            message = self.convert_message_to_base_message_param(message, role)
+            try:
+                message = self.convert_message_to_base_message_param(message, role)
+            except Exception as e:
+                logger.error(f"Error converting message to base message param: {e}")
+                return
 
             await self.memory_manager.store_conversation(
                 sender=message.role,
@@ -186,7 +199,7 @@ class BaseAgent:
             )
 
     async def _process_tools(
-        self, tools: List[BaseTool], response: OpenAICallResponse
+        self, tools: List[OpenAITool], response: OpenAICallResponse
     ) -> None:
         """Process and execute tools called by the agent."""
 
@@ -207,6 +220,7 @@ class BaseAgent:
         tool_messages = response.tool_message_params
 
         messages = tool_messages(tools_and_outputs)
+
         self.history.extend(messages)
 
         if self.memory_manager:
@@ -215,26 +229,25 @@ class BaseAgent:
     async def _store_tool_interactions(self, messages: List) -> None:
         """Store tool interactions in memory."""
         if self.memory_manager:
-            for msg in messages:
-                await self.memory_manager.store_conversation(
-                    sender="Tool",
-                    message_content=f"{msg.tool_name}: {msg.content}",
-                    message_type=MessageType.TOOL,
-                    conversation_id=self.conversation_id,
-                )
 
-    def rotate_api_key(self) -> None:
-        """Rotate the api key."""
-        if self.rotating_api_keys:
-            if self.api_key_env_var:
-                api_key = self.rotating_api_keys.rotate()
-                os.environ[self.api_key_env_var] = api_key
+            for msg in messages:
+                try:
+                    await self.memory_manager.store_conversation(
+                        sender="Tool",
+                        message_content=f"{msg['name']}: {msg['content']}",
+                        message_type=MessageType.TOOL,
+                        conversation_id=self.conversation_id,
+                    )
+                except Exception as e:
+                    logger.error(f"Error storing tool interaction: {e}")
 
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
     )
-    @litellm.call(model=default_model_name)
+    @litellm.call(
+        model=default_model_name, response_model=ReasoningAction, json_mode=True
+    )
     @prompt_template(
         """
         MESSAGES: {self.history}
@@ -242,19 +255,13 @@ class BaseAgent:
         USER:
         Do not act, just first analyze the current situation and observations, then recommend the most effective action to take based on your assessment.
         
-        OBSERVATION: {current_observation}
-        
         YOUR THOUGHT AND ACTION:
         """
     )
-    async def _reasoning_action(
-        self, query: Messages.Type, observation: Messages.Type | None = None
-    ) -> BaseDynamicConfig:
+    async def _reasoning_action(self):
         """Reasoning about the action to take."""
         self.rotate_api_key()
-        current_observation = observation or query
-
-        return {"computed_fields": {"current_observation": current_observation}}
+        ...
 
     async def _default_llm_call(
         self,
@@ -279,6 +286,10 @@ class BaseAgent:
 
         return await lite_llm_call()
 
+    def format_reasoning_response(self, response: ReasoningAction) -> str:
+        """Format the reasoning response."""
+        return f"Thought: {response.thought}\nNext Action: {response.action}\nShould I send a message to the Human: {response.send_message_to_human}"
+
     async def step(
         self,
         query: Messages.Type,
@@ -287,15 +298,38 @@ class BaseAgent:
         try:
             await self.store_turn_message(query, "user")
             self.history.append(query)
-            response = await self._default_llm_call(query)
 
-            if tools := getattr(response, "tools", None):
-                await self._process_tools(tools, response)
-                return await self.step("")  # Continue the conversation
+            # chain of thought reasoning action loop
+            reach_to_human = False
+            while not reach_to_human:
+                # reasoning step
+                reasoning_response = await self._reasoning_action()  # type: ignore
+                reach_to_human = reasoning_response.send_message_to_human
+                formatted_reasoning_response = self.format_reasoning_response(
+                    reasoning_response
+                )
+                print(formatted_reasoning_response, sep="\n\n")
 
-            await self.store_turn_message(response.content, "assistant")
+                self.history.append(Messages.Assistant(formatted_reasoning_response))
+                await self.store_turn_message(
+                    Messages.Assistant(formatted_reasoning_response), "assistant"
+                )
 
-            self.history.append(response)
+                # action step
+                response = await self._default_llm_call(
+                    Messages.User("Let's execute your proposed action.")
+                )  # type: ignore
+                self.history.append(response.message_param)  # type: ignore
+                await self.store_turn_message(response.message_param, "assistant")  # type: ignore
+
+                if tools := response.tools:
+                    await self._process_tools(tools, response)
+                    # return await self.step("")  # Continue the conversation
+
+            # # reach out to human with final response
+            # response = await self._default_llm_call(query)
+            # self.history.append(response.message_param)  # type: ignore
+            # await self.store_turn_message(response.message_param, "assistant")  # type: ignore
 
             return response.content
 
@@ -329,9 +363,14 @@ class BaseAgent:
             logger.error(f"Error in run: {e}")
             raise e
         finally:
+            print(self.history)
+            print("-" * 50)
             if self.memory_manager:
                 if len(self.history) >= 4:
-                    await self.memory_manager.reflection_conversation()
+                    user_feedback = input(
+                        f"Please provide your feedback for the conversation with {self.agent_id}: "
+                    )
+                    await self.memory_manager.reflection_conversation(user_feedback)
 
     async def initialize_conversation(self) -> None:
         """Initialize conversation by loading best prompt and short-term memory."""
@@ -348,12 +387,9 @@ class BaseAgent:
                 logger.info(f"Loaded system prompt: {self.system_prompt}")
 
             self.short_term_memory = await self.memory_manager.get_short_term_memory()
-            logger.info(
-                f"Enhanced system prompt with short-term memory context: {self.short_term_memory}"
-            )
 
             logger.debug(
-                f"Enhanced system prompt with short-term memory context: {self._enhance_prompt_with_memory()}"
+                f"Enhanced system prompt with short-term memory context:\n{self._enhance_prompt_with_memory()}"
             )
 
         except Exception as e:
@@ -362,41 +398,41 @@ class BaseAgent:
 
     def _enhance_prompt_with_memory(self) -> str:
         """Enhance the system prompt with context from short-term memory."""
-        agent_id = f"Your ID: {self.agent_id}\n"
 
         if self.short_term_memory:
             # logger.debug("Populate short-term memory into system prompt")
             short_memory_prompt = f"""
-                ## AGENT INFORMATION & IDENTITY: 
-                {self.short_term_memory.agent_info}
-                
-                ## AGENT BELIEFS: 
-                {self.short_term_memory.agent_beliefs}
-                
-                ## USER INFORMATION: 
-                {self.short_term_memory.user_info}
-                
-                ## LAST CONVERSATION SUMMARY: 
-                {self.short_term_memory.last_conversation_summary}
-                
-                ## RECENT GOALS AND STATUS: 
-                {self.short_term_memory.recent_goal_and_status}
-                
-                ## IMPORTANT CONTEXT: 
-                {self.short_term_memory.important_context}
-                """
+## AGENT INFORMATION & IDENTITY: 
+{self.short_term_memory.agent_info}
+
+## AGENT BELIEFS: 
+{self.short_term_memory.agent_beliefs}
+
+## USER INFORMATION: 
+{self.short_term_memory.user_info}
+
+## LAST CONVERSATION SUMMARY: 
+{self.short_term_memory.last_conversation_summary}
+
+## RECENT GOALS AND STATUS: 
+{self.short_term_memory.recent_goal_and_status}
+
+## IMPORTANT CONTEXT: 
+{self.short_term_memory.important_context}
+            """
 
         else:
             short_memory_prompt = "This is your first interaction with the user."
 
         return inspect.cleandoc(
             f"""
-            # AGENT ID: {agent_id}
-            
-            # SYSTEM INSTRUCTIONS:
-            
-            {self.system_prompt}
-            
-            {short_memory_prompt}
+# AGENT ID: {self.agent_id}
+
+# SYSTEM INSTRUCTIONS:
+
+{self.system_prompt}
+
+# SHORT-TERM MEMORY:
+{short_memory_prompt}
             """
-        )
+        ).strip()

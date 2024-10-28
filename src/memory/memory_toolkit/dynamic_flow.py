@@ -9,14 +9,14 @@ from src.memory.memory_manager import MemoryManager
 class DynamicMemoryToolKit(BaseToolKit):
     """Toolkit for managing memory operations including storage and retrieval."""
 
-    __namespace__ = "long_term_memory_operations"
+    __namespace__ = "long_term_knowledge_base"
 
     memory_manager: MemoryManager
 
     @toolkit_tool
     async def remember_knowledge(
         self,
-        knowledge_text: str,
+        knowledge_text: List[str],
         entities: List[str],
         relationship_text: List[str],
     ) -> str:
@@ -29,30 +29,26 @@ class DynamicMemoryToolKit(BaseToolKit):
         - When you have a new feeling
         - When you encounter important information.
 
-        To store knowledge, provide the text you want to remember, a list of relevant entities associated with it, and descriptions of how those entities relate to each other.
+        To store knowledge, provide the list of facts, knowledges or informations you want to remember, a list of relevant entities names associated with it, and descriptions of how those entities relate to each other (For example: "John is a friend of Mary", "Paris is in France", "Water is wet", "human have emotions", "emotions guide human behavior").
         """
 
         try:
             if not self.memory_manager:
                 return "Error: Memory manager not available"
 
-            async def _store():
+            new_relationships = []
+            existing_relationships = []
 
-                return_msg = ""
-                new_relationships = []
-                existing_relationships = []
-
+            for knowledge in knowledge_text:
                 similar_knowledge, _ = await self.memory_manager.query_knowledge(
-                    query=knowledge_text, threshold=0.9
+                    query=knowledge, threshold=0.9
                 )
                 if similar_knowledge:
-                    return_msg += (
-                        f"Knowledge already exists: {similar_knowledge[0].text}\n"
-                    )
+                    continue
                 else:
                     text_embedding = (
                         await self.memory_manager.embedding_model.get_text_embedding(
-                            knowledge_text
+                            knowledge
                         )
                     )
 
@@ -64,41 +60,33 @@ class DynamicMemoryToolKit(BaseToolKit):
                     )
 
                     await self.memory_manager.store_knowledge(
-                        text=knowledge_text,
+                        text=knowledge,
                         entities=entities,
                         keywords=entities,
                         text_embedding=text_embedding,
                         entity_embeddings=entity_embeddings,
                     )
 
-                    return_msg += f"Stored new knowledge {knowledge_text} sucessfully."
+            for rel_text in relationship_text:
+                similar_rel, _ = await self.memory_manager.query_entities(
+                    rel_text, threshold=0.9
+                )
 
-                for rel_text in relationship_text:
-                    similar_rel, _ = await self.memory_manager.query_entities(
-                        rel_text, threshold=0.9
-                    )
-
-                    if similar_rel:
-                        existing_relationships.append(similar_rel)
-                    else:
-                        rel_embedding = await self.memory_manager.embedding_model.get_text_embedding(
+                if similar_rel:
+                    existing_relationships.append(similar_rel)
+                else:
+                    rel_embedding = (
+                        await self.memory_manager.embedding_model.get_text_embedding(
                             rel_text
                         )
+                    )
 
-                        await self.memory_manager.store_entity_relationship(
-                            relationship_text=rel_text, embedding=rel_embedding
-                        )
-                        new_relationships.append(rel_text)
+                    await self.memory_manager.store_entity_relationship(
+                        relationship_text=rel_text, embedding=rel_embedding
+                    )
+                    new_relationships.append(rel_text)
 
-                if new_relationships:
-                    return_msg += f"Stored new entity relationships sucessfully: {new_relationships}\n"
-
-                if existing_relationships:
-                    return_msg += f"Entity relationships already exist: {existing_relationships}\n"
-
-                return return_msg
-
-            return await _store()
+            return "Successfully stored knowledge and relationships."
 
         except Exception as e:
             logger.error(f"Error storing knowledge: {e}")
@@ -195,7 +183,7 @@ class DynamicMemoryToolKit(BaseToolKit):
     async def remember_entities_relationship(
         self,
         entities: List[str],
-        relationship_text: str,
+        relationship_text: List[str],
     ) -> str:
         """Store relationships between entities in your long-term memory.
 
@@ -205,34 +193,32 @@ class DynamicMemoryToolKit(BaseToolKit):
         - When you want to explicitly store relationships without associated knowledge
         - When you need to update or add new relationships between known entities
 
-        To use this tool, provide a list of entity names and a description of how the entities are related.
+        To use this tool, provide a list of entity names and a list of descriptions of how the entities are related. (For example: "John is a friend of Mary", "Paris is in France", "Water is wet", "human have emotions", "emotions guide human behavior").
         """
         try:
             if not self.memory_manager:
                 return "Error: Memory manager not available"
 
-            async def _store_relationship():
+            for rel_text in relationship_text:
                 similar_rel, _ = await self.memory_manager.query_entities(
-                    relationship_text, threshold=0.95
+                    rel_text, threshold=0.93
                 )
 
                 if similar_rel:
-                    return f"Relationship already exists: {similar_rel[0].relationship_text}"
+                    continue
 
                 rel_embedding = (
                     await self.memory_manager.embedding_model.get_text_embedding(
-                        relationship_text
+                        rel_text
                     )
                 )
 
                 await self.memory_manager.store_entity_relationship(
-                    relationship_text=relationship_text,
+                    relationship_text=rel_text,
                     embedding=rel_embedding,
                 )
 
-                return f"Successfully stored relationship between entities {', '.join(entities)}: {relationship_text}"
-
-            return await _store_relationship()
+            return f"Successfully stored relationship between entities."
 
         except Exception as e:
             logger.error(f"Error storing entity relationship: {e}")

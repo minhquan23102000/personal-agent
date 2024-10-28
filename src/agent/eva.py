@@ -17,7 +17,7 @@ class Eva(BaseAgent):
     """An agent that helps users find and recommend books."""
 
     system_prompt: str = (
-        "You are a helpful agent. Assist the user with their questions and needs."
+        "You are a helpful agent. Assist the user with their questions and needs. User is your master, serve him/her with all your knowledge and skills."
     )
     agent_id: str = "Eva - 9000"
     api_key_env_var: str = "GEMINI_API_KEY"

@@ -68,8 +68,10 @@ class MemoryManager:
     def set_agent(self, agent: "BaseAgent") -> None:
         self.agent = agent
 
-    async def reflection_conversation(self) -> None:
-        await reflection_conversation(memory_manager=self)
+    async def reflection_conversation(
+        self, user_feedback: str = "No user feedback provided."
+    ) -> None:
+        await reflection_conversation(memory_manager=self, user_feedback=user_feedback)
 
     async def store_conversation(
         self,

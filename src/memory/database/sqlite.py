@@ -594,8 +594,6 @@ class SQLiteDatabase(BaseDatabase):
     ) -> ShortTermMemory:
         """Store short-term memory state"""
         async with self.get_connection() as conn:
-            # First clear any existing state since we only keep current state
-            conn.execute("DELETE FROM short_term_memory_state")
 
             cursor = conn.execute(
                 """

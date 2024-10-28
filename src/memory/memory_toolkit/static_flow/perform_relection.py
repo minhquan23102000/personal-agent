@@ -49,22 +49,21 @@ class BaseSelfReflection(BaseModel):
     MESSAGES: {history}
     
     USER:
-    Your curent system prompt: 
-    
-    <Start of System Prompt>
-    {system_prompt}
-    <End of System Prompt>
-    
-    Your task:
     Analyze the provided conversation history and your system prompt. Evaluating your performance in the conversation on a scale of 0-10. Identify strengths and successes, as well as areas for improvement. Specific examples from the conversation to illustrate your points. Finally, suggest an improved system prompt that addresses any identified issues.
+    
+    USER FEEDBACK:
+    {user_feedback}
     """
 )
-def base_self_reflection_prompt(system_prompt, history): ...
+def base_self_reflection_prompt(system_prompt, history, user_feedback): ...
 
 
-async def perform_self_reflection(agent: "BaseAgent") -> BaseSelfReflection:
+async def perform_self_reflection(
+    agent: "BaseAgent", user_feedback: str = ""
+) -> BaseSelfReflection:
     """Perform structured self-reflection and generate improvements."""
     try:
+        user_feedback = user_feedback or "No user feedback provided."
 
         @retry(
             stop=stop_after_attempt(3),
@@ -79,7 +78,9 @@ async def perform_self_reflection(agent: "BaseAgent") -> BaseSelfReflection:
             config = {}
 
             config["messages"] = base_self_reflection_prompt(
-                system_prompt=agent.system_prompt, history=agent.history
+                system_prompt=agent.system_prompt,
+                history=agent.history,
+                user_feedback=user_feedback,
             )
 
             if errors:

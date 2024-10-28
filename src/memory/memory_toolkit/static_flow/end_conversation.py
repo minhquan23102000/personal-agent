@@ -13,7 +13,7 @@ from src.memory.memory_toolkit.static_flow.perform_relection import (
     perform_self_reflection,
 )
 from typing import TYPE_CHECKING
-
+from rich import print
 
 if TYPE_CHECKING:
     from src.memory.memory_manager import MemoryManager
@@ -30,9 +30,11 @@ def format_summary(summary: BaseConversationSummary) -> str:
 
 
 # Update end_conversation to include short-term memory update
-async def reflection_conversation(memory_manager: "MemoryManager") -> None:
+async def reflection_conversation(
+    memory_manager: "MemoryManager", user_feedback: str = "No user feedback provided."
+) -> None:
     """Handle all end of conversation tasks."""
-    logger.info("Starting end of conversation memory...")
+    print("Starting end of conversation memory...")
 
     try:
 
@@ -41,11 +43,13 @@ async def reflection_conversation(memory_manager: "MemoryManager") -> None:
         summary_str = format_summary(summary_response)
         memory_manager.agent.rotate_api_key()
 
-        reflection_response = await perform_self_reflection(memory_manager.agent)
+        reflection_response = await perform_self_reflection(
+            memory_manager.agent, user_feedback
+        )
         memory_manager.agent.rotate_api_key()
 
-        logger.info(f"Summary: {summary_str}\n\n")
-        logger.info(f"Reflection: {reflection_response}\n\n")
+        print(f"Summary: {summary_str}\n\n")
+        print(f"Reflection: {reflection_response}\n\n")
 
         # 2. Store conversation summary and improvements
         await memory_manager.store_conversation_summary(
@@ -72,10 +76,11 @@ async def reflection_conversation(memory_manager: "MemoryManager") -> None:
         memory_updates = await generate_updated_short_term_memory(
             summary=summary_str,
             agent=memory_manager.agent,
+            user_feedback=user_feedback,
         )
         memory_manager.agent.rotate_api_key()
 
-        logger.info(f"Memory Updates: {memory_updates}")
+        print(f"Memory Updates: {memory_updates}")
 
         # Store updated memory
         await memory_manager.store_short_term_memory(
@@ -90,4 +95,4 @@ async def reflection_conversation(memory_manager: "MemoryManager") -> None:
         logger.error(f"Error memory conversation: {e}")
         raise e
 
-    logger.info("Successfully completed all conversation end tasks")
+    print("Successfully completed all conversation end tasks")

@@ -19,19 +19,19 @@ class BaseShortTermMemoryUpdate(BaseModel):
     """Model for short-term memory updates."""
 
     user_info: str = Field(
-        description="Identify any new details about the user's preferences, personality, background, needs, hypothesis about user, or anything else important beyond that emerged during the conversation. Should be a list of bullet points. Should be compressed as much as possible."
+        description="Identify any new details about the user's preferences, personality, background, needs, hypothesis about user, or anything else important beyond that emerged during the conversation."
     )
     recent_goal_and_status: str = Field(
-        description="Document the current goals the user has set and their progress or status. Should be a list of bullet points. Should be compressed as much as possible."
+        description="Document the all the goals the user has set and their progress or status. Should be a list of bullet points in short and concise."
     )
     important_context: str = Field(
-        description="Capture any significant contextual elements that should be retained for future reference. Should be compressed as much as possible. Should be a list of bullet points."
+        description="Capture any significant contextual elements that should be retained for future reference. Should be compressed and short as much as possible. Should be a list of bullet points in short and concise."
     )
     agent_beliefs: str = Field(
-        description="Adjust the your understanding of the user's intentions and the world based on insights gained from the conversation. What you have learned about the user and the world? Should be a list of bullet points. Should be compressed as much as possible."
+        description="Adjust the your belife and understanding of the world based on insights gained from the conversation. Should be a list of bullet points."
     )
     agent_info: str = Field(
-        description="How the conversation has changed you? An updated of your personality, role, name, gender, language, style, age, profile, history experience, habbits, hobbies, likes, hates, and anything beyond. Should be a list of bullet points. Should be compressed as much as possible."
+        description="How the conversation has changed you? Describe detailed of your personality, role, name, gender, language, style, age, profile, history experience, habbits, hobbies, likes, hates, and anything beyond."
     )
 
 
@@ -40,20 +40,27 @@ class BaseShortTermMemoryUpdate(BaseModel):
     MESSAGES: {history}
     
     USER:
-    Extract and update your short-term memory based on conversation history. Think of what is important, what is not important. Then write an updated short-term memory.
+    Extract and update your short-term memory based on conversation history. Think of what is important, what is not important. What need to remember or update? And what need to forget or delete. Then write an updated short-term memory.
+    
+    USER FEEDBACK:
+    {user_feedback}
+    
+    Updated to your current short-term memory:
+    {current_memory}
     """
 )
-def short_term_memory_prompt(history, current_memory): ...
+def short_term_memory_prompt(history, current_memory, user_feedback): ...
 
 
 async def generate_updated_short_term_memory(
-    agent: "BaseAgent", summary: str
+    agent: "BaseAgent", summary: str, user_feedback: str = "No user feedback provided."
 ) -> BaseShortTermMemoryUpdate:
     """Get updated short-term memory state after conversation."""
     try:
         prompt = short_term_memory_prompt(
             history=agent.history,
             current_memory=agent.short_term_memory,
+            user_feedback=user_feedback,
         )
 
         @retry(
@@ -78,8 +85,6 @@ async def generate_updated_short_term_memory(
             return config
 
         response = call()
-
-        response.important_context += f"\n\nLast conversation summary: {summary}"
 
         return response
     except Exception as e:
