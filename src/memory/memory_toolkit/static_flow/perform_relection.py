@@ -73,7 +73,7 @@ async def perform_self_reflection(
             after=collect_errors(ValidationError),
         )
         @litellm.call(
-            model=agent.reasoning_model_name,
+            model=agent.slow_model_name,
             response_model=BaseSelfReflection,
             json_mode=True,
         )

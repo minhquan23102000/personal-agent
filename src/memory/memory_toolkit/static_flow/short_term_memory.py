@@ -34,7 +34,7 @@ class BaseShortTermMemoryUpdate(BaseModel):
         description="How the conversation has changed you? Describe detailed of your personality, role, name, gender, language, style, age, profile, historical background, relationship with user and anything beyond."
     )
     environment_info: str = Field(
-        description="Describe the environment you are in. Resource, tools you have, anything you can experience, observe, realize, understand, feel, etc. Objects, people, time, space, etc."
+        description="Describe the environment you are in. Anything you can experience, observe, realize, understand, feel, etc. Objects, resources, people, time, space, etc. Only include what is most meaningful to you."
     )
 
 
@@ -43,7 +43,7 @@ class BaseShortTermMemoryUpdate(BaseModel):
     MESSAGES: {history}
     
     USER:
-    Extract and update your short-term memory based on conversation history. Think of what need to remember or update? And what need to forget or delete. Then write an updated short-term memory. Think of it is as writting a note for your future self. This is very important, as it updated your future behavior and decision making.
+    Extract and update your short-term memory based on conversation history. Think of what need to remember or update? And what need to forget or delete? Then write an updated short-term memory. Think of it is as writting a note for your future self. This is very important, as it updated your future behavior, personality, and decision making. So be very careful and thoughtful.
     
     USER FEEDBACK:
     {user_feedback}
@@ -71,7 +71,7 @@ async def generate_updated_short_term_memory(
             after=collect_errors(ValidationError),
         )
         @litellm.call(
-            model=agent.reasoning_model_name,
+            model=agent.slow_model_name,
             response_model=BaseShortTermMemoryUpdate,
             json_mode=True,
         )

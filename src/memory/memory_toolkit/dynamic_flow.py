@@ -7,29 +7,33 @@ from src.memory.memory_manager import MemoryManager
 
 
 class DynamicMemoryToolKit(BaseToolKit):
-    """Toolkit for managing memory operations including storage and retrieval."""
+    """Toolkit for managing memory operations including storage and retrieval. Use this toolkit to store and retrieve knowledge, facts, entities, relationships, and conversation contexts."""
 
-    __namespace__ = "long_term_knowledge_base"
+    __namespace__ = "agent_long_term_memory"
 
     memory_manager: MemoryManager
 
     @toolkit_tool
-    async def store_knowledge(
+    async def store_knowledge_to_memory(
         self,
         knowledge_text: List[str],
         entities: List[str],
         relationship_text: List[str],
     ) -> str:
-        """Save important information to your long-term memory. Whenever you ensures the information is retained even across different conversations or sessions and for long term benefit.
+        """Save important information, knowledge, facts to your long-term memory.
 
-        You can use this function in following scenarios:
+        You can use this function in the following scenarios:
         - When you learn something new
         - When you have a realization
         - When you have a new idea
         - When you have a new feeling
-        - When you encounter important information.
+        - When you encounter important information
 
-        To store knowledge, provide the list of facts, knowledges or informations you want to remember, a list of relevant entities names associated with it, and descriptions of how those entities relate to each other (For example: "John is a friend of Mary", "Paris is in France", "Water is wet", "human have emotions", "emotions guide human behavior").
+        Args:
+            self: self.
+            knowledge_text (List[str]): A list of knowledge strings to be stored.
+            entities (List[str]): A list of entities related to the knowledge.
+            relationship_text (List[str]): A list of relationship strings to be stored, item format "{entity1} {relationship} {entity2}", keep it short and concise.
         """
 
         try:
@@ -94,15 +98,15 @@ class DynamicMemoryToolKit(BaseToolKit):
 
     @toolkit_tool
     async def search_knowledge_facts(self, query: str) -> str:
-        """Retrieve and search relevant knowledge from your long-term memory.
+        """Search knowledge, facts from your long-term memory.
 
-        You can use this function in following scenarios:
+        You can use this function in the following scenarios:
         - When you need to recall important information
         - When you need to find a specific fact
         - When you need to find related information
-        - When you think that your current memory is incomplete or lacking knowledge to complete a task or answer a question.
 
-        Search the knowledge base using the given query to locate pertinent information and any associated entities.
+        Args:
+            query (str): The query string used to search for relevant knowledge.
         """
         try:
             if not self.memory_manager:
@@ -136,15 +140,15 @@ class DynamicMemoryToolKit(BaseToolKit):
 
     @toolkit_tool
     async def search_entities_facts(self, entities: List[str]) -> str:
-        """Retrieve and search knowledge, facts of entities orrelationships between entities.
+        """Search knowledge, facts of entities or relationships between entities.
 
-        You can use this function in following scenarios:
+        You can use this function in the following scenarios:
         - When you need to find connections between entities
         - When you need to find relationships between entities
-        - When you need to find information, knowledge or facts about entities
-        - When you think that your current memory is incomplete or lacking knowledge to complete a task or answer a question.
+        - When you need to find information, knowledge, or facts about entities
 
-        To search for relationships between entities, provide a list of entity names.
+        Args:
+            entities (List[str]): A list of entity names to search for relationships and knowledge.
         """
         try:
             if not self.memory_manager:
@@ -180,7 +184,7 @@ class DynamicMemoryToolKit(BaseToolKit):
             return f"Error searching relationships: {str(e)}"
 
     @toolkit_tool
-    async def store_entities_relationship(
+    async def store_entities_relationship_to_memory(
         self,
         entities: List[str],
         relationship_text: List[str],
@@ -193,7 +197,10 @@ class DynamicMemoryToolKit(BaseToolKit):
         - When you want to explicitly store relationships without associated knowledge
         - When you need to update or add new relationships between known entities
 
-        To use this tool, provide a list of entity names and a list of descriptions of how the entities are related. (For example: "John is a friend of Mary", "Paris is in France", "Water is wet", "human have emotions", "emotions guide human behavior").
+        Args:
+            self: self.
+            entities (List[str]): A list of entity names to store relationships for.
+            relationship_text (List[str]): A list of relationship descriptions between the entities, item format "{entity1} {relationship} {entity2}", keep it short and concise.
         """
         try:
             if not self.memory_manager:
@@ -236,6 +243,9 @@ class DynamicMemoryToolKit(BaseToolKit):
         - When you need to understand patterns in user behavior or conversation flow
 
         The function will search through past conversation contexts using semantic similarity and return the most relevant ones.
+
+        Args:
+            query (str): The query string to search for similar conversation contexts.
         """
         try:
             if not self.memory_manager:
@@ -257,14 +267,14 @@ class DynamicMemoryToolKit(BaseToolKit):
 
                 for memory in similar_memories:
                     context_summary = [
-                        f"\nConversation id: {memory.conversation_id}",
-                        f"Summary: {memory.last_conversation_summary}",
-                        f"Goal & Status: {memory.recent_goal_and_status}",
-                        f"Important Context: {memory.important_context}",
-                        f"User Info: {memory.user_info}",
-                        f"Agent Beliefs: {memory.agent_beliefs}",
-                        f"Environment Info: {memory.environment_info}",
-                        f"Conversation ended at: {memory.timestamp}",
+                        f"\nConversation id: {memory.conversation_id}\n",
+                        f"Summary:\n{memory.last_conversation_summary}\n",
+                        f"Goal & Status:\n{memory.recent_goal_and_status}\n",
+                        f"Important Context:\n{memory.important_context}\n",
+                        f"User Info:\n{memory.user_info}\n",
+                        f"Agent Beliefs:\n{memory.agent_beliefs}\n",
+                        f"Environment Info:\n{memory.environment_info}\n",
+                        f"Conversation ended at: {memory.timestamp}\n",
                     ]
                     results.extend(context_summary)
 

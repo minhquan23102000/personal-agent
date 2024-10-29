@@ -9,8 +9,6 @@ from src.memory import MemoryManager
 from rich import print
 from src.config import GOOGLE_API_KEY_LIST
 
-print(GOOGLE_API_KEY_LIST)
-
 
 @dataclass
 class Eva(BaseAgent):

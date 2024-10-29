@@ -31,6 +31,7 @@ from src.util.rotating_list import RotatingList
 import os
 from rich import print
 import rich
+from src.agent.tools.prompt import build_prompt_from_list_tools, get_list_tools_name
 
 
 def generate_agent_id() -> str:
@@ -54,8 +55,8 @@ async def send_message_to_human(message: str) -> str:
 class BaseAgent:
     """Base class for all agents with memory integration."""
 
-    action_model_name: str = "gemini/gemini-1.5-pro-002"
-    reasoning_model_name: str = "gemini/gemini-1.5-flash-002"
+    default_model_name: str = "gemini/gemini-1.5-flash-002"
+    slow_model_name: str = "gemini/gemini-1.5-flash-002"
     history: List[BaseMessageParam | Messages.Type | OpenAICallResponse] = field(
         default_factory=list
     )
@@ -72,6 +73,12 @@ class BaseAgent:
     api_key_env_var: str | None = None
 
     def __post_init__(self):
+
+        logger.info(f"Agent ID: {self.agent_id}")
+        logger.info(f"Action Model: {self.default_model_name}")
+        logger.info(f"Reasoning Model: {self.slow_model_name}")
+        logger.info(f"Temperature: {self.temperature}")
+
         if self.memory_manager:
             dynamic_toolkit = get_memory_toolkit(self.memory_manager)
             self.add_tools(dynamic_toolkit.create_tools())
@@ -153,6 +160,9 @@ class BaseAgent:
         {system_prompt}
         {short_term_memory_prompt}
         
+        ## LIST OF TOOLS YOU CAN USE: 
+        {tools_prompt}
+        
         MESSAGES: {history}
         """
     )
@@ -161,6 +171,7 @@ class BaseAgent:
         include_history: bool = True,
         include_short_term_memory: bool = True,
         include_system_prompt: bool = True,
+        include_tools_prompt: bool = True,
     ) -> BaseDynamicConfig:
         """Build the prompt for the agent using the current state."""
         system_prompt = self._build_system_prompt() if include_system_prompt else ""
@@ -168,12 +179,17 @@ class BaseAgent:
             self._build_short_term_memory_prompt() if include_short_term_memory else ""
         )
         history = self.history if include_history else []
-
+        tools_prompt = (
+            build_prompt_from_list_tools(self.get_tools())
+            if include_tools_prompt and self.get_tools()
+            else ""
+        )
         return {
             "computed_fields": {
                 "system_prompt": system_prompt,
                 "short_term_memory_prompt": short_term_memory_prompt,
                 "history": history,
+                "tools_prompt": tools_prompt,
             }
         }
 
@@ -183,44 +199,100 @@ class BaseAgent:
         thought: str = pydantic.Field(
             description="Your thought on the current situation, obervation."
         )
+        send_message_to_user: bool = pydantic.Field(
+            description="Return True if this action is send a message to the user and end your turn. False if you think that there are still an action, or tool use to take."
+        )
         action: str = pydantic.Field(
-            description="Provide short and concise the most optimal action to take."
+            description="Provide short and concise the optimal actions to take."
         )
         tools: List[str] = pydantic.Field(
-            description=f"List of tools (you have access to) use in the action. Else leave it empty."
+            description="List of tools use in the action. Else leave it empty if there are not necessary to use any tools. If the send_message_to_human is True, this field should be empty.",
         )
-        send_message_to_human: bool = pydantic.Field(
-            description="Return True if the next action will be to send a message to the user. False otherwise."
+        message_to_user: str = pydantic.Field(
+            default="",
+            description="The message to send to the user if send_message_to_user is True. Else leave it empty string.",
         )
+
+        @pydantic.field_validator("tools")
+        def validate_tools(self, v: list[str]) -> list[str]:
+            if (self.send_message_to_user or self.message_to_user) and v:
+                raise ValueError(
+                    "Tools use should be empty if send_message_to_user True or message_to_user is not empty string. If you think there are still an action or tool use to take, set send_message_to_user to False and message_to_user to empty string."
+                )
+            return v
+
+        @pydantic.field_validator("send_message_to_user")
+        def validate_send_message_to_user(self, v: bool) -> bool:
+            if v and self.tools:
+                raise ValueError(
+                    "send_message_to_user should be False if tools is not empty. If there are still an action or tool use to take, set send_message_to_user to False and message_to_user to empty string."
+                )
+            return v
+
+        @pydantic.field_validator("message_to_user")
+        def validate_message_to_user(self, v: str) -> str:
+            if self.send_message_to_user and not v:
+                raise ValueError(
+                    "Message to user should not be empty if send_message_to_user is True."
+                )
+            return v
 
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
+        after=collect_errors(ValidationError),
     )
     @litellm.call(
-        model=reasoning_model_name, response_model=ReasoningAction, json_mode=True
+        model=default_model_name, response_model=ReasoningAction, json_mode=True
     )
     @prompt_template(
         """
-        MESSAGES: {self.history}
+        MESSAGES: 
+        {history}
         
         USER:
-        Do not act, just first give your thought on the current situation and observations, then decide what actions to do.
+        {previous_errors}
+        
+        From last message or output, give your thought on the current situation and observations, then decide what actions to do. You can decide multiple actions at once, but be aware your limitations, as multiple actions might not be feasible and can give errors.
+        Actions can be executed tools you currently have access, send messages to human, or continue to think and plan or anything necessary to achieve the goal.
+        
+        - Write down your thought
+        - Write down the optimal actions to take
+        - Write down the tools you will use if any. The tools name should be a list of tool names {tools_names}. 
+        - Write down if you should send a message to user and end your turn.
+        - Write down the message to send to user if send_message_to_user is True.
         """
     )
-    async def _reasoning_action(self):
+    async def _reasoning_action(
+        self, *, errors: list[ValidationError] | None = None
+    ) -> BaseDynamicConfig:
         """Reasoning about the action to take."""
         self.rotate_api_key()
-        ...
+        history = self.history
+        tools_names = get_list_tools_name(self.get_tools())
+
+        return {
+            "computed_fields": {
+                "history": history,
+                "tools_names": tools_names,
+                "previous_errors": f"Previous errors: {errors}",
+            }
+        }
 
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
     )
-    @litellm.call(model=action_model_name)
-    async def _default_call(self) -> BaseDynamicConfig:
+    @litellm.call(model=default_model_name)
+    async def _default_call(
+        self, query: BaseMessageParam | None = None
+    ) -> BaseDynamicConfig:
         messages = self._build_prompt()
         tools = self.get_tools()
+        self.rotate_api_key()
+
+        if query:
+            messages.append(query)
 
         return {
             "messages": messages,
@@ -258,7 +330,7 @@ class BaseAgent:
 
     def format_reasoning_response(self, response: ReasoningAction) -> str:
         """Format the reasoning response."""
-        return f"Thought: {response.thought}\nNext Action: {response.action}\nShould I send a message to the Human: {response.send_message_to_human}"
+        return f"Thought: {response.thought}\nAction: {response.action}\nExecute tools: {response.tools}\nShould I stop and send message: {response.send_message_to_user}"
 
     async def step(
         self,
@@ -271,47 +343,67 @@ class BaseAgent:
 
             # chain of thought reasoning action loop
             reach_to_human = False
-            while not reach_to_human:
+            message_to_user = ""
+            while not reach_to_human or not message_to_user:
                 # reasoning step
                 reasoning_response = await self._reasoning_action()  # type: ignore
-                reach_to_human = reasoning_response.send_message_to_human
+
+                # condition to stop and send back message
+                reach_to_human = reasoning_response.send_message_to_user
+                message_to_user = reasoning_response.message_to_user
+
                 formatted_reasoning_response = self.format_reasoning_response(
                     reasoning_response
                 )
-                print(formatted_reasoning_response, sep="\n\n")
-
                 self.history.append(Messages.Assistant(formatted_reasoning_response))
+                print(formatted_reasoning_response, sep="\n\n")
                 await self.store_turn_message(
                     Messages.Assistant(formatted_reasoning_response), "assistant"
                 )
+
+                if reasoning_response.tools:
+                    action_query = Messages.User(
+                        f"Let's executing the action with tools: {reasoning_response.tools}"
+                    )
+                    self.history.append(action_query)
+
+                    tool_action_response = await self._default_call()  # type: ignore
+
+                    self.history.append(tool_action_response.message_param)
+                    await self.store_turn_message(
+                        tool_action_response.message_param, "assistant"
+                    )
+
+                    while not tool_action_response.tools:
+                        action_query = Messages.User(
+                            f"You should use the tools: {tool_action_response.tools} to execute the action."
+                        )
+                        self.history.append(action_query)
+
+                        tool_action_response = await self._default_call()  # type: ignore
+                        self.history.append(tool_action_response.message_param)
+                        await self.store_turn_message(
+                            tool_action_response.message_param, "assistant"
+                        )
+
+                    if tools := tool_action_response.tools:
+                        await self._process_tools(tools, tool_action_response)
+
+                # response = await self._default_call(Messages.User(""))  # type: ignore
+                # self.history.append(response.message_param)  # type: ignore
+                # await self.store_turn_message(response.message_param, "assistant")  # type: ignore
+                # if tools := response.tools:
+                #     await self._process_tools(tools, response)
+                # response = await self._default_call(Messages.User(""))
                 time.sleep(1)
 
-                # action step
-                response = await self._default_call(
-                    Messages.User("Let's execute your proposed action.")
-                )  # type: ignore
-                self.history.append(response.message_param)  # type: ignore
-                await self.store_turn_message(response.message_param, "assistant")  # type: ignore
-
-                if tools := response.tools:
-                    await self._process_tools(tools, response)
-                    # return await self.step("")  # Continue the conversation
-
-                time.sleep(1)
-
-            # # reach out to human with final response
-            # response = await self._default_llm_call(query)
-            # self.history.append(response.message_param)  # type: ignore
-            # await self.store_turn_message(response.message_param, "assistant")  # type: ignore
-
-            return response.content
+            return message_to_user
 
         except Exception as e:
-            config = self._build_call_config(query)
             logger.error(
                 f"Error in agent step: {e}. Traceback: {traceback.format_exc()}."
             )
-            print(f"Formatted Config: {json.dumps(config, indent=4)}")
+            print(self.history)
 
             raise e
 

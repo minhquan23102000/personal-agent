@@ -17,9 +17,8 @@ from src.memory.models import (
     MessageType,
     ShortTermMemory,
 )
-import asyncio
 import re
-from config import DATA_DIR
+from src.config import DATA_DIR
 
 
 @dataclass
