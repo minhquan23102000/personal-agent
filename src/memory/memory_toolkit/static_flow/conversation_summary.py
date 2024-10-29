@@ -35,7 +35,7 @@ def base_conversation_summary_prompt(history): ...
 
 async def generate_conversation_summary(agent: "BaseAgent") -> BaseConversationSummary:
     """Generate a structured summary of the current conversation."""
-    prompt = base_conversation_summary_prompt(history=agent.history)
+    prompt = base_conversation_summary_prompt(history=agent._build_prompt())
 
     # response = await agent._custom_llm_call(
     #     query=prompt,
@@ -48,7 +48,7 @@ async def generate_conversation_summary(agent: "BaseAgent") -> BaseConversationS
         after=collect_errors(ValidationError),
     )
     @litellm.call(
-        model=agent.slow_model_name,
+        model=agent.reasoning_model_name,
         response_model=BaseConversationSummary,
         json_mode=True,
     )

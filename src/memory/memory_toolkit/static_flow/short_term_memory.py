@@ -22,7 +22,7 @@ class BaseShortTermMemoryUpdate(BaseModel):
         description="Identify any new details about the user's preferences, personality, background, needs, styles, habits, beliefs, your relationship with user or anything you understand about user."
     )
     recent_goal_and_status: str = Field(
-        description="Document the all the goals the user has set and their progress or status. Should be a list of bullet points in short and concise."
+        description="Document the all the goals the user has set and their progress or status. Should be a list of bullet points in short and concise. If goal is completed, remove it from the list."
     )
     important_context: str = Field(
         description="Capture any significant contextual elements that should be retained for future reference. Should be compressed and short as much as possible. Should be a list of bullet points in short and concise."
@@ -43,7 +43,7 @@ class BaseShortTermMemoryUpdate(BaseModel):
     MESSAGES: {history}
     
     USER:
-    Extract and update your short-term memory based on conversation history. Think of what need to remember or update? And what need to forget or delete. Then write an updated short-term memory.
+    Extract and update your short-term memory based on conversation history. Think of what need to remember or update? And what need to forget or delete. Then write an updated short-term memory. Think of it is as writting a note for your future self. This is very important, as it updated your future behavior and decision making.
     
     USER FEEDBACK:
     {user_feedback}
@@ -61,7 +61,7 @@ async def generate_updated_short_term_memory(
     """Get updated short-term memory state after conversation."""
     try:
         prompt = short_term_memory_prompt(
-            history=agent.history,
+            history=agent._build_prompt(include_short_term_memory=False),
             current_memory=agent.short_term_memory,
             user_feedback=user_feedback,
         )
@@ -71,7 +71,7 @@ async def generate_updated_short_term_memory(
             after=collect_errors(ValidationError),
         )
         @litellm.call(
-            model=agent.slow_model_name,
+            model=agent.reasoning_model_name,
             response_model=BaseShortTermMemoryUpdate,
             json_mode=True,
         )

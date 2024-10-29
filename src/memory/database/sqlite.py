@@ -2,7 +2,7 @@ from typing import AsyncGenerator, Literal, Optional, List
 import sqlite3
 import sqlite_vec
 import json
-from datetime import datetime, 
+from datetime import datetime
 from contextlib import asynccontextmanager
 from pathlib import Path
 from loguru import logger
@@ -19,6 +19,7 @@ from src.memory.models import (
 )
 import asyncio
 import re
+from config import DATA_DIR
 
 
 @dataclass
@@ -34,7 +35,7 @@ class SQLiteDatabase(BaseDatabase):
         self.db_uri = self.db_uri.strip("_")
 
         if not self.db_uri.endswith(".db"):
-            self.db_uri = f"{self.db_uri}.db"
+            self.db_uri = f"{DATA_DIR}/{self.db_uri}.db"
 
         # Set connection config
         self.connection_config = {
@@ -92,6 +93,7 @@ class SQLiteDatabase(BaseDatabase):
             """
             CREATE TABLE IF NOT EXISTS short_term_memory_state (
                 id INTEGER PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
                 user_info TEXT NOT NULL,
                 last_conversation_summary TEXT NOT NULL,
                 recent_goal_and_status TEXT NOT NULL,
@@ -100,6 +102,16 @@ class SQLiteDatabase(BaseDatabase):
                 agent_info TEXT NOT NULL,
                 environment_info TEXT NOT NULL,
                 timestamp DATETIME NOT NULL
+            )
+            """
+        )
+
+        # Create vector index for short term memory
+        conn.execute(
+            f"""
+            CREATE VIRTUAL TABLE IF NOT EXISTS short_term_memory_vec USING vec0(
+                id integer primary key,
+                summary_embedding float[{self.connection_config['embedding_size']}]
             )
             """
         )
@@ -585,6 +597,7 @@ class SQLiteDatabase(BaseDatabase):
 
     async def store_short_term_memory(
         self,
+        conversation_id: str,
         user_info: str,
         last_conversation_summary: str,
         recent_goal_and_status: str,
@@ -592,19 +605,20 @@ class SQLiteDatabase(BaseDatabase):
         agent_beliefs: str,
         agent_info: str,
         environment_info: str,
+        summary_embedding: List[float],
     ) -> ShortTermMemory:
-        """Store short-term memory state"""
+        """Store short-term memory state with embedding"""
         async with self.get_connection() as conn:
-
             cursor = conn.execute(
                 """
                 INSERT INTO short_term_memory_state (
-                    user_info, last_conversation_summary, recent_goal_and_status,
+                    conversation_id, user_info, last_conversation_summary, recent_goal_and_status,
                     important_context, agent_beliefs, agent_info, environment_info, timestamp
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
+                    conversation_id,
                     user_info,
                     last_conversation_summary,
                     recent_goal_and_status,
@@ -616,9 +630,26 @@ class SQLiteDatabase(BaseDatabase):
                 ),
             )
 
+            memory_id = cursor.lastrowid
+
+            # Store embedding in vector table
+            conn.execute(
+                """
+                INSERT INTO short_term_memory_vec(
+                    id,
+                    summary_embedding
+                ) VALUES (?, ?)
+                """,
+                (
+                    memory_id,
+                    json.dumps(summary_embedding),
+                ),
+            )
+
             conn.commit()
 
             return ShortTermMemory(
+                conversation_id=conversation_id,
                 user_info=user_info,
                 last_conversation_summary=last_conversation_summary,
                 recent_goal_and_status=recent_goal_and_status,
@@ -629,32 +660,39 @@ class SQLiteDatabase(BaseDatabase):
                 timestamp=datetime.now(),
             )
 
-    async def get_short_term_memory(self) -> Optional[ShortTermMemory]:
+    async def get_short_term_memory(
+        self, conversation_id: Optional[str] = None
+    ) -> Optional[ShortTermMemory]:
         """Retrieve current short-term memory state"""
         async with self.get_connection() as conn:
-            cursor = conn.execute(
-                """
-                SELECT user_info, last_conversation_summary, recent_goal_and_status,
+            query = """
+                SELECT conversation_id, user_info, last_conversation_summary, recent_goal_and_status,
                        important_context, agent_beliefs, agent_info, environment_info, timestamp
                 FROM short_term_memory_state
-                ORDER BY timestamp DESC
-                LIMIT 1
-                """
-            )
+            """
+            params = []
 
+            if conversation_id:
+                query += " WHERE conversation_id = ?"
+                params.append(conversation_id)
+
+            query += " ORDER BY timestamp DESC LIMIT 1"
+
+            cursor = conn.execute(query, params)
             row = cursor.fetchone()
             if not row:
                 return None
 
             return ShortTermMemory(
-                user_info=row[0],
-                last_conversation_summary=row[1],
-                recent_goal_and_status=row[2],
-                important_context=row[3],
-                agent_beliefs=row[4],
-                agent_info=row[5],
-                environment_info=row[6],
-                timestamp=datetime.fromisoformat(row[7]),
+                conversation_id=row[0],
+                user_info=row[1],
+                last_conversation_summary=row[2],
+                recent_goal_and_status=row[3],
+                important_context=row[4],
+                agent_beliefs=row[5],
+                agent_info=row[6],
+                environment_info=row[7],
+                timestamp=datetime.fromisoformat(row[8]),
             )
 
     async def get_latest_conversation_summary(self) -> Optional[ConversationSummary]:
@@ -683,3 +721,49 @@ class SQLiteDatabase(BaseDatabase):
                 conversation_summary=row[7],
                 timestamp=datetime.fromisoformat(row[8]),
             )
+
+    async def search_similar_short_term_memories(
+        self,
+        query_embedding: List[float],
+        limit: int = 5,
+    ) -> List[ShortTermMemory]:
+        """Search for similar short-term memories using vector similarity"""
+        async with self.get_connection() as conn:
+            query_json = json.dumps(query_embedding)
+
+            cursor = conn.execute(
+                """
+                WITH vector_matches AS (
+                    SELECT 
+                        id,
+                        summary_embedding,
+                        distance
+                    FROM short_term_memory_vec
+                    WHERE summary_embedding MATCH ?
+                    LIMIT ?
+                )
+                SELECT 
+                    s.*,
+                    vm.distance
+                FROM short_term_memory_state s
+                JOIN vector_matches vm ON s.id = vm.id
+                ORDER BY vm.distance
+                """,
+                (query_json, limit),
+            )
+
+            rows = cursor.fetchall()
+            return [
+                ShortTermMemory(
+                    conversation_id=row[1],
+                    user_info=row[2],
+                    last_conversation_summary=row[3],
+                    recent_goal_and_status=row[4],
+                    important_context=row[5],
+                    agent_beliefs=row[6],
+                    agent_info=row[7],
+                    environment_info=row[8],
+                    timestamp=datetime.fromisoformat(row[9]),
+                )
+                for row in rows
+            ]

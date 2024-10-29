@@ -390,6 +390,7 @@ class MemoryManager:
 
     async def store_short_term_memory(
         self,
+        conversation_id: str,
         user_info: str,
         last_conversation_summary: str,
         recent_goal_and_status: str,
@@ -398,20 +399,16 @@ class MemoryManager:
         agent_info: str,
         environment_info: str,
     ) -> ShortTermMemory:
-        """Store short-term memory state
-
-        Args:
-            user_info: Current user information
-            last_conversation_summary: Summary of the last conversation
-            recent_goal_and_status: Current conversation goal
-            important_context: Important contextual information
-            agent_beliefs: Agent's current beliefs
-            agent_info: Agent's basic information
-        Returns:
-            ShortTermMemory: The stored memory state
-        """
+        """Store short-term memory state with embedding"""
         try:
+            # Create a summary text for embedding
+            summary_text = f"{last_conversation_summary}"
+            summary_embedding = await self.embedding_model.get_text_embedding(
+                summary_text
+            )
+
             return await self.db.store_short_term_memory(
+                conversation_id=conversation_id,
                 user_info=user_info,
                 last_conversation_summary=last_conversation_summary,
                 recent_goal_and_status=recent_goal_and_status,
@@ -419,19 +416,55 @@ class MemoryManager:
                 agent_beliefs=agent_beliefs,
                 agent_info=agent_info,
                 environment_info=environment_info,
+                summary_embedding=summary_embedding,
             )
         except Exception as e:
             logger.error(f"Error storing short-term memory: {str(e)}")
             raise
 
-    async def get_short_term_memory(self) -> Optional[ShortTermMemory]:
+    async def search_similar_short_term_memories(
+        self,
+        query: str,
+        limit: int = 3,
+        threshold: float | None = None,
+    ) -> List[ShortTermMemory]:
+        """Search for similar short-term memories based on query text"""
+        try:
+            # Get query embedding
+            query_embedding = await self.embedding_model.get_text_embedding(query)
+
+            # Get similar memories
+            memories = await self.db.search_similar_short_term_memories(
+                query_embedding=query_embedding,
+                limit=limit,
+            )
+
+            # Rerank if needed
+            if self.use_reranker:
+                memories = await self._rerank_results(
+                    query=query,
+                    items=memories,
+                    text_extractor=lambda x: f"{x.last_conversation_summary}",
+                    limit=limit,
+                    threshold=threshold,
+                )
+
+            return memories
+
+        except Exception as e:
+            logger.error(f"Error searching short-term memories: {str(e)}")
+            raise
+
+    async def get_short_term_memory(
+        self, conversation_id: Optional[str] = None
+    ) -> Optional[ShortTermMemory]:
         """Retrieve the current short-term memory state
 
         Returns:
             Optional[ShortTermMemory]: The current memory state if it exists
         """
         try:
-            return await self.db.get_short_term_memory()
+            return await self.db.get_short_term_memory(conversation_id=conversation_id)
         except Exception as e:
             logger.error(f"Error retrieving short-term memory: {str(e)}")
             raise

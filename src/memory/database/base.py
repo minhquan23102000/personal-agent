@@ -52,6 +52,7 @@ class BaseDatabase(ABC):
     @abstractmethod
     async def store_short_term_memory(
         self,
+        conversation_id: str,
         user_info: str,
         last_conversation_summary: str,
         recent_goal_and_status: str,
@@ -59,12 +60,15 @@ class BaseDatabase(ABC):
         agent_beliefs: str,
         agent_info: str,
         environment_info: str,
+        summary_embedding: List[float],
     ) -> ShortTermMemory:
-        """Store short-term memory state"""
+        """Store short-term memory state with embedding"""
         pass
 
     @abstractmethod
-    async def get_short_term_memory(self) -> Optional[ShortTermMemory]:
+    async def get_short_term_memory(
+        self, conversation_id: Optional[str] = None
+    ) -> Optional[ShortTermMemory]:
         """Retrieve current short-term memory state"""
         pass
 
@@ -172,4 +176,13 @@ class BaseDatabase(ABC):
     @abstractmethod
     async def get_latest_conversation_summary(self) -> Optional[ConversationSummary]:
         """Get the most recent conversation summary"""
+        pass
+
+    @abstractmethod
+    async def search_similar_short_term_memories(
+        self,
+        query_embedding: List[float],
+        limit: int = 5,
+    ) -> List[ShortTermMemory]:
+        """Search for similar short-term memories"""
         pass

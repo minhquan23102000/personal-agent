@@ -53,6 +53,9 @@ class BaseSelfReflection(BaseModel):
     
     USER FEEDBACK:
     {user_feedback}
+    
+    YOUR CURRENT SYSTEM PROMPT:
+    {system_prompt}
     """
 )
 def base_self_reflection_prompt(system_prompt, history, user_feedback): ...
@@ -70,7 +73,7 @@ async def perform_self_reflection(
             after=collect_errors(ValidationError),
         )
         @litellm.call(
-            model=agent.slow_model_name,
+            model=agent.reasoning_model_name,
             response_model=BaseSelfReflection,
             json_mode=True,
         )
@@ -78,8 +81,8 @@ async def perform_self_reflection(
             config = {}
 
             config["messages"] = base_self_reflection_prompt(
-                system_prompt=agent.system_prompt,
-                history=agent.history,
+                system_prompt=agent._build_system_prompt(),
+                history=agent._build_prompt(include_system_prompt=False),
                 user_feedback=user_feedback,
             )
 

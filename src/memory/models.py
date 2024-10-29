@@ -14,6 +14,7 @@ class MessageType(str, Enum):
 
 
 class ShortTermMemory(BaseModel):
+    conversation_id: str
     user_info: str
     last_conversation_summary: str
     recent_goal_and_status: str

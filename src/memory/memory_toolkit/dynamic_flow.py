@@ -14,7 +14,7 @@ class DynamicMemoryToolKit(BaseToolKit):
     memory_manager: MemoryManager
 
     @toolkit_tool
-    async def remember_knowledge(
+    async def store_knowledge(
         self,
         knowledge_text: List[str],
         entities: List[str],
@@ -93,7 +93,7 @@ class DynamicMemoryToolKit(BaseToolKit):
             return f"Error storing knowledge: {str(e)}"
 
     @toolkit_tool
-    async def search_knowledge(self, query: str) -> str:
+    async def search_knowledge_facts(self, query: str) -> str:
         """Retrieve and search relevant knowledge from your long-term memory.
 
         You can use this function in following scenarios:
@@ -135,8 +135,8 @@ class DynamicMemoryToolKit(BaseToolKit):
             return f"Error searching knowledge: {str(e)}"
 
     @toolkit_tool
-    async def search_entity_relationships(self, entities: List[str]) -> str:
-        """Retrieve and search knowledge of entities orrelationships between entities.
+    async def search_entities_facts(self, entities: List[str]) -> str:
+        """Retrieve and search knowledge, facts of entities orrelationships between entities.
 
         You can use this function in following scenarios:
         - When you need to find connections between entities
@@ -180,7 +180,7 @@ class DynamicMemoryToolKit(BaseToolKit):
             return f"Error searching relationships: {str(e)}"
 
     @toolkit_tool
-    async def remember_entities_relationship(
+    async def store_entities_relationship(
         self,
         entities: List[str],
         relationship_text: List[str],
@@ -223,6 +223,99 @@ class DynamicMemoryToolKit(BaseToolKit):
         except Exception as e:
             logger.error(f"Error storing entity relationship: {e}")
             return f"Error storing entity relationship: {str(e)}"
+
+    @toolkit_tool
+    async def recall_similar_conversation_contexts(self, query: str) -> str:
+        """Search for similar conversation contexts from your memory to help understand the current situation better.
+
+        You can use this function in following scenarios:
+        - When you need to recall how you handled similar conversations in the past
+        - When you want to understand the context of similar situations
+        - When you need to maintain consistency in your responses across similar conversations
+        - When you want to learn from past interactions to improve current responses
+        - When you need to understand patterns in user behavior or conversation flow
+
+        The function will search through past conversation contexts using semantic similarity and return the most relevant ones.
+        """
+        try:
+            if not self.memory_manager:
+                return "Error: Memory manager not available"
+
+            async def _search_contexts():
+                similar_memories = (
+                    await self.memory_manager.search_similar_short_term_memories(
+                        query=query,
+                        limit=3,
+                        threshold=0.7,
+                    )
+                )
+
+                if not similar_memories:
+                    return "No similar conversation contexts found."
+
+                results = ["Similar Conversation Contexts:"]
+
+                for memory in similar_memories:
+                    context_summary = [
+                        f"\nConversation id: {memory.conversation_id}",
+                        f"Summary: {memory.last_conversation_summary}",
+                        f"Goal & Status: {memory.recent_goal_and_status}",
+                        f"Important Context: {memory.important_context}",
+                        f"User Info: {memory.user_info}",
+                        f"Agent Beliefs: {memory.agent_beliefs}",
+                        f"Environment Info: {memory.environment_info}",
+                        f"Conversation ended at: {memory.timestamp}",
+                    ]
+                    results.extend(context_summary)
+
+                return "\n".join(results)
+
+            return await _search_contexts()
+
+        except Exception as e:
+            logger.error(f"Error searching conversation contexts: {e}")
+            return f"Error searching conversation contexts: {str(e)}"
+
+    # @toolkit_tool
+    # async def recall_conversation_by_id(self, conversation_id: str) -> str:
+    #     """Retrieve the specific conversation context using its ID.
+
+    #     You can use this function in following scenarios:
+    #     - When you need to recall the exact details of a specific conversation
+    #     - When you want to reference or continue a previous conversation
+    #     - When you need to verify or check specific details from a past interaction
+    #     - When you need to maintain continuity across conversation sessions
+
+    #     Provide the conversation_id to get the detailed context of that specific conversation.
+    #     """
+    #     try:
+    #         if not self.memory_manager:
+    #             return "Error: Memory manager not available"
+
+    #         memory = await self.memory_manager.get_short_term_memory(
+    #             conversation_id=conversation_id
+    #         )
+
+    #         if not memory:
+    #             return f"No conversation context found for ID: {conversation_id}"
+
+    #         context_details = [
+    #             f"Conversation Context for ID: {conversation_id}",
+    #             f"\nSummary: {memory.last_conversation_summary}",
+    #             f"Goal & Status: {memory.recent_goal_and_status}",
+    #             f"Important Context: {memory.important_context}",
+    #             f"User Info: {memory.user_info}",
+    #             f"Agent Beliefs: {memory.agent_beliefs}",
+    #             f"Agent Info: {memory.agent_info}",
+    #             f"Environment Info: {memory.environment_info}",
+    #             f"\nTimestamp: {memory.timestamp}",
+    #         ]
+
+    #         return "\n".join(context_details)
+
+    #     except Exception as e:
+    #         logger.error(f"Error retrieving conversation context: {e}")
+    #         return f"Error retrieving conversation context: {str(e)}"
 
 
 def get_memory_toolkit(memory_manager: "MemoryManager") -> DynamicMemoryToolKit:

@@ -38,20 +38,6 @@ def generate_agent_id() -> str:
     return hashlib.sha256(random_id.encode()).hexdigest()[:8]
 
 
-class ReasoningAction(pydantic.BaseModel):
-    """Thought and action reasoning."""
-
-    thought: str = pydantic.Field(
-        description="Your thought, feeling on the current situation, obervation."
-    )
-    action: str = pydantic.Field(
-        description="Provide short and concise the most optimal next action to take, or determine the best tools you currently have to address it effectively (if any)."
-    )
-    send_message_to_human: bool = pydantic.Field(
-        description="Return True if the next action will be to send a message to the user. False otherwise."
-    )
-
-
 async def send_message_to_human(message: str) -> str:
     """A tool help you communication with human your creator."""
     print(f"[Agent Message]: {message}")
@@ -68,8 +54,8 @@ async def send_message_to_human(message: str) -> str:
 class BaseAgent:
     """Base class for all agents with memory integration."""
 
-    default_model_name: str = "gemini/gemini-1.5-flash-002"
-    slow_model_name: str = "gemini/gemini-1.5-pro-002"
+    action_model_name: str = "gemini/gemini-1.5-pro-002"
+    reasoning_model_name: str = "gemini/gemini-1.5-flash-002"
     history: List[BaseMessageParam | Messages.Type | OpenAICallResponse] = field(
         default_factory=list
     )
@@ -113,91 +99,134 @@ class BaseAgent:
         """Get the list of tools available to this agent."""
         return self.tools
 
-    def build_prompt(
-        self,
-        query: Messages.Type,
-        include_history: bool = True,
-    ) -> Messages.Type:
-        """Build the prompt for the agent using the current state."""
-        system_prompt = self._enhance_prompt_with_memory()
+    def _build_system_prompt(self) -> str:
 
-        messages = (
-            [Messages.System(system_prompt), *self.history] if include_history else []
-        )
+        return inspect.cleandoc(
+            f"""
+            # AGENT ID: {self.agent_id}
 
-        if isinstance(query, str):
-            return [*messages, Messages.User(query)]
+            # CURRENT TIME: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+            # SYSTEM INSTRUCTIONS:
+
+            {self.system_prompt}
+            """
+        ).strip()
+
+    def _build_short_term_memory_prompt(self) -> str:
+        """Enhance the system prompt with context from short-term memory."""
+
+        if self.short_term_memory:
+            # logger.debug("Populate short-term memory into system prompt")
+            short_memory_prompt = f"""
+            ## AGENT INFORMATION & IDENTITY: 
+            {self.short_term_memory.agent_info}
+
+            ## AGENT BELIEFS: 
+            {self.short_term_memory.agent_beliefs}
+
+            ## USER INFORMATION: 
+            {self.short_term_memory.user_info}
+
+            ## LAST CONVERSATION SUMMARY:
+            Conversation ended at {self.short_term_memory.timestamp.strftime("%Y-%m-%d %H:%M:%S")}
+            {self.short_term_memory.last_conversation_summary}
+
+            ## RECENT GOALS AND STATUS: 
+            {self.short_term_memory.recent_goal_and_status}
+
+            ## IMPORTANT CONTEXT: 
+            {self.short_term_memory.important_context}
+
+            ## ENVIRONMENT INFORMATION: 
+            {self.short_term_memory.environment_info}
+            """
+
         else:
-            if isinstance(query, list):
-                return [*messages, *query]
-            else:
-                return [*messages, query]
+            short_memory_prompt = "This is your first interaction with the user."
 
-    def _build_call_config(
+        return inspect.cleandoc(short_memory_prompt).strip()
+
+    @prompt_template(
+        """
+        SYSTEM: 
+        {system_prompt}
+        {short_term_memory_prompt}
+        
+        MESSAGES: {history}
+        """
+    )
+    def _build_prompt(
         self,
-        query: Messages.Type,
-        call_params: dict = {},
         include_history: bool = True,
-        include_tools: bool = True,
-        custom_tools: List[Union[Type[BaseTool], Callable]] = [],
-        errors: list[ValidationError] | None = None,
-    ) -> Dict[str, Any]:
-        """Build the configuration for the LLM call."""
-        if call_params.get("temperature"):
-            call_params["temperature"] = self.temperature
+        include_short_term_memory: bool = True,
+        include_system_prompt: bool = True,
+    ) -> BaseDynamicConfig:
+        """Build the prompt for the agent using the current state."""
+        system_prompt = self._build_system_prompt() if include_system_prompt else ""
+        short_term_memory_prompt = (
+            self._build_short_term_memory_prompt() if include_short_term_memory else ""
+        )
+        history = self.history if include_history else []
 
-        messages = self.build_prompt(query, include_history)
-
-        tools = self.get_tools() if include_tools else []
-        tools.extend(custom_tools)
-
-        config = {
-            "messages": messages,
-            "tools": tools,
-            "call_params": call_params,
+        return {
+            "computed_fields": {
+                "system_prompt": system_prompt,
+                "short_term_memory_prompt": short_term_memory_prompt,
+                "history": history,
+            }
         }
 
-        if errors:
-            config["computed_fields"] = {
-                "previous_errors": f"Previous Errors: {errors}"
-            }
+    class ReasoningAction(pydantic.BaseModel):
+        """Thought and action reasoning."""
 
-        return config
+        thought: str = pydantic.Field(
+            description="Your thought on the current situation, obervation."
+        )
+        action: str = pydantic.Field(
+            description="Provide short and concise the most optimal action to take."
+        )
+        tools: List[str] = pydantic.Field(
+            description=f"List of tools (you have access to) use in the action. Else leave it empty."
+        )
+        send_message_to_human: bool = pydantic.Field(
+            description="Return True if the next action will be to send a message to the user. False otherwise."
+        )
 
-    def convert_message_to_base_message_param(
-        self, message: BaseMessageParam | Messages.Type | str | dict, role: str
-    ) -> BaseMessageParam:
-        if isinstance(message, BaseMessageParam):
-            return message
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+    )
+    @litellm.call(
+        model=reasoning_model_name, response_model=ReasoningAction, json_mode=True
+    )
+    @prompt_template(
+        """
+        MESSAGES: {self.history}
+        
+        USER:
+        Do not act, just first give your thought on the current situation and observations, then decide what actions to do.
+        """
+    )
+    async def _reasoning_action(self):
+        """Reasoning about the action to take."""
+        self.rotate_api_key()
+        ...
 
-        if isinstance(message, dict):
-            return BaseMessageParam(
-                role=role,
-                content=str(message["tool_calls"]),
-            )
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+    )
+    @litellm.call(model=action_model_name)
+    async def _default_call(self) -> BaseDynamicConfig:
+        messages = self._build_prompt()
+        tools = self.get_tools()
 
-        return BaseMessageParam(role=role, content=str(message))
-
-    async def store_turn_message(
-        self,
-        message: Messages.Type | str | dict,
-        role: str = "assistant",
-        message_type: MessageType = MessageType.TEXT,
-    ) -> None:
-        """Store a single turn message in memory."""
-        if self.memory_manager:
-            try:
-                message = self.convert_message_to_base_message_param(message, role)
-            except Exception as e:
-                logger.error(f"Error converting message to base message param: {e}")
-                return
-
-            await self.memory_manager.store_conversation(
-                sender=message.role,
-                message_content=str(message.content),
-                message_type=message_type,
-                conversation_id=self.conversation_id,
-            )
+        return {
+            "messages": messages,
+            "tools": tools,
+            "call_params": {"temperature": self.temperature},
+        }
 
     async def _process_tools(
         self, tools: List[OpenAITool], response: OpenAICallResponse
@@ -226,64 +255,6 @@ class BaseAgent:
 
         if self.memory_manager:
             await self._store_tool_interactions(messages)
-
-    async def _store_tool_interactions(self, messages: List) -> None:
-        """Store tool interactions in memory."""
-        if self.memory_manager:
-
-            for msg in messages:
-                try:
-                    await self.memory_manager.store_conversation(
-                        sender="Tool",
-                        message_content=f"{msg['name']}: {msg['content']}",
-                        message_type=MessageType.TOOL,
-                        conversation_id=self.conversation_id,
-                    )
-                except Exception as e:
-                    logger.error(f"Error storing tool interaction: {e}")
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-    )
-    @litellm.call(model=slow_model_name, response_model=ReasoningAction, json_mode=True)
-    @prompt_template(
-        """
-        MESSAGES: {self.history}
-        
-        USER:
-        Do not act, just first analyze the current situation and observations, then recommend the most effective action to take based on your assessment.
-        
-        YOUR THOUGHT AND ACTION:
-        """
-    )
-    async def _reasoning_action(self):
-        """Reasoning about the action to take."""
-        self.rotate_api_key()
-        ...
-
-    async def _default_llm_call(
-        self,
-        query: Messages.Type,
-        call_params: dict = {},
-        *,
-        errors: list[ValidationError] | None = None,
-    ) -> OpenAICallResponse:
-        """Make a call to the LLM using litellm."""
-        config = self._build_call_config(query, call_params, errors=errors)
-
-        @retry(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential(multiplier=1, min=4, max=10),
-        )
-        @litellm.call(model=self.default_model_name)
-        async def lite_llm_call():
-            # Rotate api key after each call
-            self.rotate_api_key()
-
-            return config
-
-        return await lite_llm_call()
 
     def format_reasoning_response(self, response: ReasoningAction) -> str:
         """Format the reasoning response."""
@@ -316,7 +287,7 @@ class BaseAgent:
                 time.sleep(1)
 
                 # action step
-                response = await self._default_llm_call(
+                response = await self._default_call(
                     Messages.User("Let's execute your proposed action.")
                 )  # type: ignore
                 self.history.append(response.message_param)  # type: ignore
@@ -391,51 +362,59 @@ class BaseAgent:
             self.short_term_memory = await self.memory_manager.get_short_term_memory()
 
             logger.debug(
-                f"Enhanced system prompt with short-term memory context:\n{self._enhance_prompt_with_memory()}"
+                f"Enhanced system prompt with short-term memory context:\n{self._build_system_prompt()}"
             )
 
         except Exception as e:
             logger.error(f"Error initializing conversation: {e}")
             logger.info("Using default system prompt")
 
-    def _enhance_prompt_with_memory(self) -> str:
-        """Enhance the system prompt with context from short-term memory."""
+    def convert_message_to_base_message_param(
+        self, message: BaseMessageParam | Messages.Type | str | dict, role: str
+    ) -> BaseMessageParam:
+        if isinstance(message, BaseMessageParam):
+            return message
 
-        if self.short_term_memory:
-            # logger.debug("Populate short-term memory into system prompt")
-            short_memory_prompt = f"""
-## AGENT INFORMATION & IDENTITY: 
-{self.short_term_memory.agent_info}
+        if isinstance(message, dict):
+            return BaseMessageParam(
+                role=role,
+                content=str(message["tool_calls"]),
+            )
 
-## AGENT BELIEFS: 
-{self.short_term_memory.agent_beliefs}
+        return BaseMessageParam(role=role, content=str(message))
 
-## USER INFORMATION: 
-{self.short_term_memory.user_info}
+    async def store_turn_message(
+        self,
+        message: Messages.Type | str | dict,
+        role: str = "assistant",
+        message_type: MessageType = MessageType.TEXT,
+    ) -> None:
+        """Store a single turn message in memory."""
+        if self.memory_manager:
+            try:
+                message = self.convert_message_to_base_message_param(message, role)
+            except Exception as e:
+                logger.error(f"Error converting message to base message param: {e}")
+                return
 
-## LAST CONVERSATION SUMMARY:
-Conversation ended at {self.short_term_memory.timestamp.strftime("%Y-%m-%d %H:%M:%S")}
-{self.short_term_memory.last_conversation_summary}
+            await self.memory_manager.store_conversation(
+                sender=message.role,
+                message_content=str(message.content),
+                message_type=message_type,
+                conversation_id=self.conversation_id,
+            )
 
-## RECENT GOALS AND STATUS: 
-{self.short_term_memory.recent_goal_and_status}
+    async def _store_tool_interactions(self, messages: List) -> None:
+        """Store tool interactions in memory."""
+        if self.memory_manager:
 
-## IMPORTANT CONTEXT: 
-{self.short_term_memory.important_context}
-            """
-
-        else:
-            short_memory_prompt = "This is your first interaction with the user."
-
-        return inspect.cleandoc(
-            f"""
-# AGENT ID: {self.agent_id}
-# CURRENT TIME: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-
-# SYSTEM INSTRUCTIONS:
-
-{self.system_prompt}
-
-{short_memory_prompt}
-            """
-        ).strip()
+            for msg in messages:
+                try:
+                    await self.memory_manager.store_conversation(
+                        sender="Tool",
+                        message_content=f"{msg['name']}: {msg['content']}",
+                        message_type=MessageType.TOOL,
+                        conversation_id=self.conversation_id,
+                    )
+                except Exception as e:
+                    logger.error(f"Error storing tool interaction: {e}")

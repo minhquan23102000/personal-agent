@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 
 def get_google_api_key():
@@ -14,3 +15,6 @@ def get_google_api_key():
 
 
 GOOGLE_API_KEY_LIST = get_google_api_key()
+
+DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR.mkdir(exist_ok=True)
