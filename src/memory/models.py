@@ -22,6 +22,8 @@ class ShortTermMemory(BaseModel):
     agent_info: (
         str  # Store the agent's basic information (name, role, personality, etc)
     )
+    environment_info: str
+    timestamp: datetime
 
 
 class ConversationMemory(BaseModel):

@@ -58,6 +58,7 @@ class BaseDatabase(ABC):
         important_context: str,
         agent_beliefs: str,
         agent_info: str,
+        environment_info: str,
     ) -> ShortTermMemory:
         """Store short-term memory state"""
         pass

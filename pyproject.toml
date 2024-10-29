@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "cmake>=3.30.5",
     "google-generativeai>=0.8.3",
     "loguru>=0.7.2",
     "mirascope[litellm,tenacity]>=1.6.0",

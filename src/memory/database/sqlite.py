@@ -2,7 +2,7 @@ from typing import AsyncGenerator, Literal, Optional, List
 import sqlite3
 import sqlite_vec
 import json
-from datetime import datetime, UTC
+from datetime import datetime, 
 from contextlib import asynccontextmanager
 from pathlib import Path
 from loguru import logger
@@ -88,7 +88,6 @@ class SQLiteDatabase(BaseDatabase):
     def initialize(self, conn: sqlite3.Connection) -> None:
         """Initialize database schema"""
         # Add short term memory state table
-        # Add short term memory state table
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS short_term_memory_state (
@@ -99,6 +98,7 @@ class SQLiteDatabase(BaseDatabase):
                 important_context TEXT NOT NULL,
                 agent_beliefs TEXT NOT NULL,
                 agent_info TEXT NOT NULL,
+                environment_info TEXT NOT NULL,
                 timestamp DATETIME NOT NULL
             )
             """
@@ -205,7 +205,7 @@ class SQLiteDatabase(BaseDatabase):
                 (
                     conversation_id,
                     turn_id,
-                    datetime.now(UTC),
+                    datetime.now(),
                     sender,
                     message_content,
                     message_type.value,
@@ -217,7 +217,7 @@ class SQLiteDatabase(BaseDatabase):
             return ConversationMemory(
                 conversation_id=conversation_id,
                 turn_id=turn_id,
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(),
                 sender=sender,
                 message_content=message_content,
                 message_type=message_type,
@@ -455,7 +455,7 @@ class SQLiteDatabase(BaseDatabase):
                     improve_prompt,
                     reward_score,
                     conversation_summary,
-                    datetime.now(UTC),
+                    datetime.now(),
                 ),
             )
 
@@ -470,7 +470,7 @@ class SQLiteDatabase(BaseDatabase):
                 improve_prompt=improve_prompt,
                 reward_score=reward_score,
                 conversation_summary=conversation_summary,
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(),
             )
 
     async def get_conversation_summary(
@@ -591,6 +591,7 @@ class SQLiteDatabase(BaseDatabase):
         important_context: str,
         agent_beliefs: str,
         agent_info: str,
+        environment_info: str,
     ) -> ShortTermMemory:
         """Store short-term memory state"""
         async with self.get_connection() as conn:
@@ -599,9 +600,9 @@ class SQLiteDatabase(BaseDatabase):
                 """
                 INSERT INTO short_term_memory_state (
                     user_info, last_conversation_summary, recent_goal_and_status,
-                    important_context, agent_beliefs, agent_info, timestamp
+                    important_context, agent_beliefs, agent_info, environment_info, timestamp
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ? )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     user_info,
@@ -610,7 +611,8 @@ class SQLiteDatabase(BaseDatabase):
                     important_context,
                     agent_beliefs,
                     agent_info,
-                    datetime.now(UTC),
+                    environment_info,
+                    datetime.now(),
                 ),
             )
 
@@ -623,6 +625,8 @@ class SQLiteDatabase(BaseDatabase):
                 important_context=important_context,
                 agent_beliefs=agent_beliefs,
                 agent_info=agent_info,
+                environment_info=environment_info,
+                timestamp=datetime.now(),
             )
 
     async def get_short_term_memory(self) -> Optional[ShortTermMemory]:
@@ -631,7 +635,7 @@ class SQLiteDatabase(BaseDatabase):
             cursor = conn.execute(
                 """
                 SELECT user_info, last_conversation_summary, recent_goal_and_status,
-                       important_context, agent_beliefs, agent_info
+                       important_context, agent_beliefs, agent_info, environment_info, timestamp
                 FROM short_term_memory_state
                 ORDER BY timestamp DESC
                 LIMIT 1
@@ -649,6 +653,8 @@ class SQLiteDatabase(BaseDatabase):
                 important_context=row[3],
                 agent_beliefs=row[4],
                 agent_info=row[5],
+                environment_info=row[6],
+                timestamp=datetime.fromisoformat(row[7]),
             )
 
     async def get_latest_conversation_summary(self) -> Optional[ConversationSummary]:

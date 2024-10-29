@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+import datetime
 import hashlib
 import inspect
 import json
@@ -67,7 +68,7 @@ async def send_message_to_human(message: str) -> str:
 class BaseAgent:
     """Base class for all agents with memory integration."""
 
-    default_model_name: str = "gemini/gemini-1.5-pro-002"
+    default_model_name: str = "gemini/gemini-1.5-flash-002"
     slow_model_name: str = "gemini/gemini-1.5-pro-002"
     history: List[BaseMessageParam | Messages.Type | OpenAICallResponse] = field(
         default_factory=list
@@ -245,9 +246,7 @@ class BaseAgent:
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
     )
-    @litellm.call(
-        model=default_model_name, response_model=ReasoningAction, json_mode=True
-    )
+    @litellm.call(model=slow_model_name, response_model=ReasoningAction, json_mode=True)
     @prompt_template(
         """
         MESSAGES: {self.history}
@@ -414,7 +413,8 @@ class BaseAgent:
 ## USER INFORMATION: 
 {self.short_term_memory.user_info}
 
-## LAST CONVERSATION SUMMARY: 
+## LAST CONVERSATION SUMMARY:
+Conversation ended at {self.short_term_memory.timestamp.strftime("%Y-%m-%d %H:%M:%S")}
 {self.short_term_memory.last_conversation_summary}
 
 ## RECENT GOALS AND STATUS: 
@@ -430,12 +430,12 @@ class BaseAgent:
         return inspect.cleandoc(
             f"""
 # AGENT ID: {self.agent_id}
+# CURRENT TIME: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 # SYSTEM INSTRUCTIONS:
 
 {self.system_prompt}
 
-# SHORT-TERM MEMORY:
 {short_memory_prompt}
             """
         ).strip()

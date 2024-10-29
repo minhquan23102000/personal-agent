@@ -33,6 +33,9 @@ class BaseShortTermMemoryUpdate(BaseModel):
     agent_info: str = Field(
         description="How the conversation has changed you? Describe detailed of your personality, role, name, gender, language, style, age, profile, historical background, relationship with user and anything beyond."
     )
+    environment_info: str = Field(
+        description="Describe the environment you are in. Resource, tools you have, anything you can experience, observe, realize, understand, feel, etc. Objects, people, time, space, etc."
+    )
 
 
 @prompt_template(

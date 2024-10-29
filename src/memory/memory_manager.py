@@ -164,6 +164,7 @@ class MemoryManager:
         feedback_text: Optional[str] = None,
         example: Optional[str] = None,
         improvement_suggestion: Optional[str] = None,
+        environment_info: Optional[str] = None,
     ) -> ConversationSummary:
         """Store conversation summary with feedback and improvements"""
         try:
@@ -395,6 +396,7 @@ class MemoryManager:
         important_context: str,
         agent_beliefs: str,
         agent_info: str,
+        environment_info: str,
     ) -> ShortTermMemory:
         """Store short-term memory state
 
@@ -416,6 +418,7 @@ class MemoryManager:
                 important_context=important_context,
                 agent_beliefs=agent_beliefs,
                 agent_info=agent_info,
+                environment_info=environment_info,
             )
         except Exception as e:
             logger.error(f"Error storing short-term memory: {str(e)}")

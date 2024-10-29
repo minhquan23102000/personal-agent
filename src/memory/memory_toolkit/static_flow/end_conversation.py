@@ -90,6 +90,7 @@ async def reflection_conversation(
             important_context=memory_updates.important_context,
             agent_beliefs=memory_updates.agent_beliefs,
             agent_info=memory_updates.agent_info,
+            environment_info=memory_updates.environment_info,
         )
     except Exception as e:
         logger.error(f"Error memory conversation: {e}")
