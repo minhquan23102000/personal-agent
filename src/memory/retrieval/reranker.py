@@ -96,6 +96,7 @@ class AdvancedReranker:
 
             # Get reranking results
             results = self.model.rank(query=query, docs=docs)
+            logger.debug(f"Reranking results: {results}")
 
             # Create mapping from doc_id back to original items
             id_to_item = {idx: item for idx, item in enumerate(items)}

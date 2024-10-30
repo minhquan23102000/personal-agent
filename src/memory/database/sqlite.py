@@ -23,7 +23,7 @@ from src.config import DATA_DIR
 
 @dataclass
 class SQLiteDatabase(BaseDatabase):
-    db_uri: str = "memory"
+    db_uri: str
     embedding_size: int = 364
     connection_config: dict = field(init=False)
 

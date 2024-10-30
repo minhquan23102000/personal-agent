@@ -3,7 +3,7 @@ from loguru import logger
 from mirascope.core import BaseToolKit, toolkit_tool
 import asyncio
 import traceback
-from src.memory.memory_manager import MemoryManager
+from src.memory.memory_manager import MemoryManager, SearchResult
 
 
 class DynamicMemoryToolKit(BaseToolKit):
@@ -13,7 +13,7 @@ class DynamicMemoryToolKit(BaseToolKit):
 
     memory_manager: MemoryManager
 
-    duplicate_threshold: float = 0.97
+    duplicate_threshold: float = 0.95
 
     @toolkit_tool
     async def store_update_knowledge(
@@ -45,6 +45,7 @@ class DynamicMemoryToolKit(BaseToolKit):
             new_relationships = []
             existing_relationships = []
 
+            return_msg = ""
             if knowledge_text:
 
                 for knowledge in knowledge_text:
@@ -76,7 +77,7 @@ class DynamicMemoryToolKit(BaseToolKit):
                     )
                     new_relationships.append(rel_text)
 
-            return "Successfully stored knowledge and entities relationships."
+            return "Successfully stored knowledge and entities relationships. {}"
 
         except Exception as e:
             logger.error(
@@ -101,21 +102,23 @@ class DynamicMemoryToolKit(BaseToolKit):
                 return "Error: Memory manager not available"
 
             knowledge_entries, relationships = (
-                await self.memory_manager.query_knowledge(
-                    query=query, threshold=self.duplicate_threshold
-                )
+                await self.memory_manager.query_knowledge(query=query)
             )
 
             results = []
             if knowledge_entries:
                 results.append("Relevant Knowledge:")
                 for entry in knowledge_entries:
-                    results.append(f"- {entry.text}")
+                    results.append(
+                        f"- {entry.item.text} (similarity: {entry.score:.2f})"
+                    )
 
             if relationships:
                 results.append("\nEntity Relationships:")
                 for rel in relationships:
-                    results.append(f"- {rel.relationship_text}")
+                    results.append(
+                        f"- {rel.item.relationship_text} (similarity: {rel.score:.2f})"
+                    )
 
             return "\n".join(results) if results else "No relevant information found."
 
@@ -150,12 +153,16 @@ class DynamicMemoryToolKit(BaseToolKit):
             if relationships:
                 results.append("Entity Relationships:")
                 for rel in relationships:
-                    results.append(f"- {rel.relationship_text}")
+                    results.append(
+                        f"- {rel.item.relationship_text} (similarity: {rel.score:.2f})"
+                    )
 
             if related_knowledge:
                 results.append("\nRelated Knowledge:")
                 for entry in related_knowledge:
-                    results.append(f"- {entry.text}")
+                    results.append(
+                        f"- {entry.item.text} (similarity: {entry.score:.2f})"
+                    )
 
             return (
                 "\n".join(results)

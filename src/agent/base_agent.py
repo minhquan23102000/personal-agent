@@ -298,6 +298,10 @@ class BaseAgent:
         self.rotate_api_key()
 
         reasoning_prompt = self._build_reasoning_prompt(errors=errors)
+        if errors:
+            self.printer.print_system_message(
+                f"Error in reasoning: {format_error_message(errors)}", type="error"
+            )
 
         return {
             "messages": reasoning_prompt,
@@ -341,11 +345,13 @@ class BaseAgent:
                 self.printer.print_system_message(f"Tool output: {output}")
                 tools_and_outputs.append((tool, output))
             except ValidationError as e:
-                error_msg = f"Error calling tool {tool._name()} invalid input: {e}"
+                error_msg = (
+                    f"Error calling tool {tool._name()} invalid input: {e.errors()}"
+                )
                 self.printer.print_system_message(error_msg, type="error")
                 tools_and_outputs.append((tool, error_msg))
             except Exception as e:
-                error_msg = f"Error calling tool {tool._name()}: {e}"
+                error_msg = f"Error calling tool {tool._name()}: {e}. Traceback: {traceback.format_exc()}"
                 self.printer.print_system_message(error_msg, type="error")
                 tools_and_outputs.append((tool, error_msg))
 
@@ -364,7 +370,7 @@ class BaseAgent:
             Feeling: {response.feeling}
             Thought: {response.thought}
             Do I reach the final goal: {"Yes" if response.goal_completed else "No"}
-            Should I talk to user: {"Yes" if response.talk_to_user else "No"}
+            Should I stop my chain of thought and talk to my Master: {"Yes" if response.talk_to_user else "No"}
             Action: {response.action}
             Execute tools in sequence: {response.tools}
             """
@@ -392,9 +398,8 @@ class BaseAgent:
             tool_action_response = await self._default_call()  # type: ignore
         else:
             action_query = Messages.User(
-                f"There are some error in the last step. Review the following errors in the parameters used with the tools: {format_error_message(errors)}."
-                f" Please correct these issues and re-execute the action: {action}."
-                f" Tools you planed to use: {tools}."
+                f"There are some error in the last step when you use tools: {tools}. You pass the wrong parameters to the tools: {format_error_message(errors)}."
+                f" Correct these parameters and re-execute the action: {action}."
             )
             self.history.append(
                 action_query
@@ -406,9 +411,10 @@ class BaseAgent:
         await self._assitant_turn_message(tool_action_response.message_param)
 
         # keep loop if agent plan use tool, but action not use the tool.
+        i = 0
         while not tool_action_response.tools:
             action_query = Messages.User(
-                f"Remind mistakes: you should use the tools as you planned: {tools} to execute the action: {action}."
+                f"USE THE TOOLS: {tools} to perform the designated action: {action}."
             )
             self.printer.print_user_message(str(action_query))
             self.history.append(
@@ -417,14 +423,25 @@ class BaseAgent:
 
             tool_action_response = await self._default_call()  # type: ignore
             await self._assitant_turn_message(tool_action_response.message_param)
+
+            self.printer.print_agent_message(tool_action_response.content)
             time.sleep(1)
+            i += 1
+            if i > self.max_thought_without_tools:
+                break
 
-        # agent response with tools call, process the tools call and return the output to history
-        await self._process_tools(tool_action_response.tools, tool_action_response)
+        if i > self.max_thought_without_tools:
+            mistake_tools_user_response = f"You are experiencing issues with the tools: {tools}. You have attempted to use them multiple times without success. Please proceed to the next step to identify the problem, if you think you can't solve it, please talk to me."
 
-        self.history.append(
-            Messages.User("")
-        )  # add empty user message to prevent bad request error
+            self.history.append(Messages.User(mistake_tools_user_response))
+            self.printer.print_user_message(mistake_tools_user_response)
+        else:
+            # agent response with tools call, process the tools call and return the output to history
+            await self._process_tools(tool_action_response.tools, tool_action_response)
+
+            self.history.append(
+                Messages.User("")
+            )  # add empty user message to prevent bad request error
 
     async def _react_loop(self) -> None:
         """React loop to reason and act."""
@@ -439,6 +456,11 @@ class BaseAgent:
             # condition to stop the chain of thought
             talk_to_human = reasoning_response.talk_to_user
             goal_completed = reasoning_response.goal_completed
+
+            if talk_to_human:
+                break
+            if goal_completed:
+                break
 
             formatted_reasoning_response = self.format_reasoning_response(
                 reasoning_response
@@ -465,6 +487,7 @@ class BaseAgent:
                 num_iterate_without_tools > self.max_thought_without_tools
             ):  # stop after 5 times of thought without doing any action
                 talk_to_human = True
+                # self.history.append(Messages.User(f""))
 
             time.sleep(1)
 
@@ -481,7 +504,9 @@ class BaseAgent:
             await self._react_loop()
 
             # final call to talk to human or when complete task, after react loop complete
-            final_response = await self._default_call(include_tools=False)  # type: ignore
+            final_response = await self._default_call(
+                query=Messages.User(""), include_tools=False
+            )  # type: ignore
             await self._assitant_turn_message(final_response.message_param)
 
             return final_response.content

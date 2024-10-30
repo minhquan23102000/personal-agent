@@ -27,8 +27,11 @@ from src.agent.error_prompt import format_error_message
 class BaseSelfReflection(BaseModel):
     """Model for self-reflection response."""
 
-    critique: str = Field(
-        description="Critique of the conversation and your performance"
+    thoughts: str = Field(
+        description="Critique and thoughts about the conversation and your performance"
+    )
+    feelings: str = Field(
+        description="Feelings about the conversation and your performance. Describe it in short keywords format with uppercase."
     )
     reward_score: float = Field(
         description="Performance score from 0-10",
@@ -84,7 +87,7 @@ async def perform_self_reflection(
 
             config["messages"] = base_self_reflection_prompt(
                 system_prompt=agent.system_prompt,
-                history=agent._build_prompt(include_system_prompt=False),
+                history=agent._build_prompt(include_system_prompt=True),
                 user_feedback=user_feedback,
             )
 

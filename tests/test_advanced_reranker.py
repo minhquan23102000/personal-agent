@@ -90,7 +90,7 @@ def test_top_k_filtering(reranker, sample_documents):
 
 def test_threshold_filtering(reranker, sample_documents):
     """Test threshold-based filtering"""
-    query = "Tell me about programming"
+    query = "What is machine learning?"
     threshold = 0.5
 
     results = reranker.rerank(
@@ -99,6 +99,8 @@ def test_threshold_filtering(reranker, sample_documents):
         text_extractor=lambda x: x.text,
         threshold=threshold,
     )
+
+    assert len(results) > 0
 
     assert all(score >= threshold for _, score in results)
 

@@ -27,13 +27,19 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 
+@dataclass
+class SearchResult(Generic[T]):
+    item: T
+    score: float
+
+
 class MemoryManager:
     def __init__(
         self,
         db_uri: str,
         database: BaseDatabase | None = None,
         embedding_model: BaseEmbedding | None = None,
-        similarity_threshold: float = 0.7,
+        similarity_threshold: float = 0.5,
         max_search_knowledge_results: int = 5,
         max_search_entity_results: int = 10,
         use_reranker: bool = True,
@@ -259,7 +265,7 @@ class MemoryManager:
         text_extractor: Callable[[T], str],
         limit: int,
         threshold: float | None = None,
-    ) -> List[T]:
+    ) -> List[SearchResult[T]]:
         """Two-stage reranking: similarity search followed by cross-encoder
 
         Args:
@@ -272,7 +278,7 @@ class MemoryManager:
             List of reranked items
         """
         if not self.use_reranker:
-            return items[:limit]
+            return [SearchResult(item=item, score=0.7) for item in items[:limit]]
 
         # Second stage: Rerank results
         reranked_items = self.reranker.rerank(
@@ -283,13 +289,13 @@ class MemoryManager:
             threshold=threshold or self.similarity_threshold,
         )
 
-        return [item for item, _ in reranked_items]
+        return [SearchResult(item=item, score=score) for item, score in reranked_items]
 
     async def query_knowledge(
         self,
         query: str,
         threshold: float | None = None,
-    ) -> Tuple[List[Knowledge], List[EntityRelationship]]:
+    ) -> Tuple[List[SearchResult[Knowledge]], List[SearchResult[EntityRelationship]]]:
         """Query knowledge and related entities based on text query"""
         try:
             # Get query embedding
@@ -347,7 +353,7 @@ class MemoryManager:
         self,
         query: str,
         threshold: float | None = None,
-    ) -> Tuple[List[EntityRelationship], List[Knowledge]]:
+    ) -> Tuple[List[SearchResult[EntityRelationship]], List[SearchResult[Knowledge]]]:
         """Query entities and related knowledge based on entity query"""
         try:
             query_embedding = await self.embedding_model.get_text_embedding(query)
