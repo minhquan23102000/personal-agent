@@ -41,46 +41,6 @@ class BaseEmbedding(ABC):
         pass
 
     @abstractmethod
-    async def get_batch_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Get embeddings for a batch of texts
-
-        Args:
-            texts (List[str]): List of input texts
-
-        Returns:
-            List[List[float]]: List of embedding vectors
-        """
-        pass
-
-    @abstractmethod
-    async def get_entity_embedding(self, entity: str) -> List[float]:
-        """Get embedding for an entity
-
-        Args:
-            entity (str): Entity text to embed
-
-        Returns:
-            List[float]: Embedding vector
-        """
-        pass
-
-    @abstractmethod
-    async def get_relationship_embedding(
-        self, entity1: str, relationship: str, entity2: str
-    ) -> List[float]:
-        """Get embedding for an entity relationship
-
-        Args:
-            entity1 (str): First entity
-            relationship (str): Relationship type
-            entity2 (str): Second entity
-
-        Returns:
-            List[float]: Embedding vector
-        """
-        pass
-
-    @abstractmethod
     async def clear_cache(self) -> None:
         """Clear embedding cache"""
         pass

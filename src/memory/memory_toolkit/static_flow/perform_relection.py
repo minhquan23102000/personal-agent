@@ -42,7 +42,7 @@ class BaseSelfReflection(BaseModel):
     )
 
     improved_prompt: str = Field(
-        description="Enhanced system prompt addressing identified issues"
+        description="Revise the system prompt to resolve identified issues. You can add, update, or remove parts of the system prompt. This is very important, as it updated your future behavior, personality, and decision making. So be very careful and thoughtful."
     )
 
 
@@ -51,7 +51,7 @@ class BaseSelfReflection(BaseModel):
     MESSAGES: {history}
     
     USER:
-    Analyze the provided conversation history and your system prompt. Evaluating your performance in the conversation on a scale of 0-10. Identify strengths and successes, as well as areas for improvement. Specific examples from the conversation to illustrate your points. Finally, suggest an improved system prompt that addresses any identified issues.
+    Analyze the provided conversation history and your system prompt. Evaluating your performance in the conversation on a scale of 0-10. Identify strengths and successes, as well as areas for improvement. Specific examples from the conversation to illustrate your points. Finally, suggest an improved system prompt that addresses any identified issues. This is very important, as it updated your future behavior, personality, and decision making. So be very careful and thoughtful.
     
     USER FEEDBACK:
     {user_feedback}

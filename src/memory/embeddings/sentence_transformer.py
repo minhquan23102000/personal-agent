@@ -72,54 +72,6 @@ class SentenceTransformerEmbedding(BaseEmbedding):
             logger.error(f"Error getting embedding for text: {str(e)}")
             raise
 
-    async def get_batch_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Get embeddings for a batch of texts"""
-        if not self.model:
-            raise RuntimeError("SentenceTransformer model not initialized")
-
-        try:
-            # Check cache first
-            embeddings = []
-            texts_to_embed = []
-            indices_to_embed = []
-
-            for i, text in enumerate(texts):
-                if self.cache_enabled and (cached := await self.cache.get(text)):
-                    embeddings.append(cached)
-                else:
-                    texts_to_embed.append(text)
-                    indices_to_embed.append(i)
-
-            if texts_to_embed:
-                batch_embeddings = self.model.encode(
-                    texts_to_embed,
-                    convert_to_numpy=True,
-                    normalize_embeddings=True,
-                ).tolist()
-
-                for i, embedding in zip(indices_to_embed, batch_embeddings):
-                    embeddings.insert(i, embedding)
-
-                    # Cache the result
-                    if self.cache_enabled:
-                        await self.cache.set(texts_to_embed[i], embedding)
-
-            return embeddings
-        except Exception as e:
-            logger.error(f"Error getting batch embeddings: {str(e)}")
-            raise
-
-    async def get_entity_embedding(self, entity: str) -> List[float]:
-        """Get embedding for an entity"""
-        return await self.get_text_embedding(entity)
-
-    async def get_relationship_embedding(
-        self, entity1: str, relationship: str, entity2: str
-    ) -> List[float]:
-        """Get embedding for an entity relationship"""
-        relationship_text = f"{entity1} {relationship} {entity2}"
-        return await self.get_text_embedding(relationship_text)
-
     async def clear_cache(self) -> None:
         """Clear embedding cache"""
         if self.cache_enabled and self.cache:

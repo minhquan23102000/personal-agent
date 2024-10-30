@@ -18,3 +18,5 @@ GOOGLE_API_KEY_LIST = get_google_api_key()
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
+
+JINA_API_KEY = os.environ.get("JINA_API_KEY")

@@ -2,7 +2,7 @@ from typing import List, Optional, TYPE_CHECKING
 from loguru import logger
 from mirascope.core import BaseToolKit, toolkit_tool
 import asyncio
-
+import traceback
 from src.memory.memory_manager import MemoryManager
 
 
@@ -12,6 +12,8 @@ class DynamicMemoryToolKit(BaseToolKit):
     __namespace__ = "long_term_memory_database"
 
     memory_manager: MemoryManager
+
+    duplicate_threshold: float = 0.97
 
     @toolkit_tool
     async def store_update_knowledge(
@@ -43,57 +45,43 @@ class DynamicMemoryToolKit(BaseToolKit):
             new_relationships = []
             existing_relationships = []
 
-            for knowledge in knowledge_text:
-                similar_knowledge, _ = await self.memory_manager.query_knowledge(
-                    query=knowledge, threshold=0.9
-                )
-                if similar_knowledge:
-                    continue
-                else:
-                    text_embedding = (
-                        await self.memory_manager.embedding_model.get_text_embedding(
-                            knowledge
+            if knowledge_text:
+
+                for knowledge in knowledge_text:
+                    similar_knowledge = (
+                        await self.memory_manager.search_similar_knowledge(
+                            query=knowledge, threshold=self.duplicate_threshold
                         )
                     )
-
-                    entity_text = ", ".join(entities)
-                    entity_embeddings = (
-                        await self.memory_manager.embedding_model.get_text_embedding(
-                            entity_text
+                    if similar_knowledge:
+                        continue
+                    else:
+                        await self.memory_manager.store_knowledge(
+                            text=knowledge,
+                            entities=entities,
+                            keywords=entities,
                         )
-                    )
 
-                    await self.memory_manager.store_knowledge(
-                        text=knowledge,
-                        entities=entities,
-                        keywords=entities,
-                        text_embedding=text_embedding,
-                        entity_embeddings=entity_embeddings,
+            if relationship_text:
+                for rel_text in relationship_text:
+                    similar_rel = await self.memory_manager.search_similar_entities(
+                        query=rel_text, threshold=self.duplicate_threshold
                     )
-
-            for rel_text in relationship_text:
-                similar_rel, _ = await self.memory_manager.query_entities(
-                    rel_text, threshold=0.9
-                )
 
                 if similar_rel:
                     existing_relationships.append(similar_rel)
                 else:
-                    rel_embedding = (
-                        await self.memory_manager.embedding_model.get_text_embedding(
-                            rel_text
-                        )
-                    )
-
                     await self.memory_manager.store_entity_relationship(
-                        relationship_text=rel_text, embedding=rel_embedding
+                        relationship_text=rel_text
                     )
                     new_relationships.append(rel_text)
 
-            return "Successfully stored knowledge and relationships."
+            return "Successfully stored knowledge and entities relationships."
 
         except Exception as e:
-            logger.error(f"Error storing knowledge: {e}")
+            logger.error(
+                f"Error storing knowledge: {e}. Traceback: {traceback.format_exc()}"
+            )
             return f"Error storing knowledge: {str(e)}"
 
     @toolkit_tool
@@ -112,31 +100,30 @@ class DynamicMemoryToolKit(BaseToolKit):
             if not self.memory_manager:
                 return "Error: Memory manager not available"
 
-            async def _search():
-                knowledge_entries, relationships = (
-                    await self.memory_manager.query_knowledge(query=query)
+            knowledge_entries, relationships = (
+                await self.memory_manager.query_knowledge(
+                    query=query, threshold=self.duplicate_threshold
                 )
+            )
 
-                results = []
-                if knowledge_entries:
-                    results.append("Relevant Knowledge:")
-                    for entry in knowledge_entries:
-                        results.append(f"- {entry.text}")
+            results = []
+            if knowledge_entries:
+                results.append("Relevant Knowledge:")
+                for entry in knowledge_entries:
+                    results.append(f"- {entry.text}")
 
-                if relationships:
-                    results.append("\nEntity Relationships:")
-                    for rel in relationships:
-                        results.append(f"- {rel.relationship_text}")
+            if relationships:
+                results.append("\nEntity Relationships:")
+                for rel in relationships:
+                    results.append(f"- {rel.relationship_text}")
 
-                return (
-                    "\n".join(results) if results else "No relevant information found."
-                )
-
-            return await _search()
+            return "\n".join(results) if results else "No relevant information found."
 
         except Exception as e:
-            logger.error(f"Error searching knowledge: {e}")
-            return f"Error searching knowledge: {str(e)}"
+            logger.error(
+                f"Error searching knowledge: {e}. Traceback: {traceback.format_exc()}"
+            )
+            return f"Error searching knowledge: {str(e)}. Traceback: {traceback.format_exc()}"
 
     @toolkit_tool
     async def search_entities_facts(self, entities: List[str]) -> str:
@@ -154,34 +141,33 @@ class DynamicMemoryToolKit(BaseToolKit):
             if not self.memory_manager:
                 return "Error: Memory manager not available"
 
-            async def _search_entities():
-                query = ", ".join(entities)
-                relationships, related_knowledge = (
-                    await self.memory_manager.query_entities(query=query)
-                )
+            query = ", ".join(entities)
+            relationships, related_knowledge = await self.memory_manager.query_entities(
+                query=query
+            )
 
-                results = []
-                if relationships:
-                    results.append("Entity Relationships:")
-                    for rel in relationships:
-                        results.append(f"- {rel.relationship_text}")
+            results = []
+            if relationships:
+                results.append("Entity Relationships:")
+                for rel in relationships:
+                    results.append(f"- {rel.relationship_text}")
 
-                if related_knowledge:
-                    results.append("\nRelated Knowledge:")
-                    for entry in related_knowledge:
-                        results.append(f"- {entry.text}")
+            if related_knowledge:
+                results.append("\nRelated Knowledge:")
+                for entry in related_knowledge:
+                    results.append(f"- {entry.text}")
 
-                return (
-                    "\n".join(results)
-                    if results
-                    else "No relationships found between these entities."
-                )
-
-            return await _search_entities()
+            return (
+                "\n".join(results)
+                if results
+                else "No relationships found between these entities."
+            )
 
         except Exception as e:
-            logger.error(f"Error searching relationships: {e}")
-            return f"Error searching relationships: {str(e)}"
+            logger.error(
+                f"Error searching relationships: {e}. Traceback: {traceback.format_exc()}"
+            )
+            return f"Error searching relationships: {str(e)}. Traceback: {traceback.format_exc()}"
 
     @toolkit_tool
     async def store_update_entities_facts(
@@ -207,29 +193,24 @@ class DynamicMemoryToolKit(BaseToolKit):
                 return "Error: Memory manager not available"
 
             for rel_text in relationship_text:
-                similar_rel, _ = await self.memory_manager.query_entities(
-                    rel_text, threshold=0.93
+                similar_rel = await self.memory_manager.search_similar_entities(
+                    query=rel_text, threshold=self.duplicate_threshold
                 )
 
                 if similar_rel:
                     continue
 
-                rel_embedding = (
-                    await self.memory_manager.embedding_model.get_text_embedding(
-                        rel_text
-                    )
-                )
-
                 await self.memory_manager.store_entity_relationship(
-                    relationship_text=rel_text,
-                    embedding=rel_embedding,
+                    relationship_text=rel_text
                 )
 
-            return f"Successfully stored relationship between entities."
+            return f"Successfully stored entities relationships."
 
         except Exception as e:
-            logger.error(f"Error storing entity relationship: {e}")
-            return f"Error storing entity relationship: {str(e)}"
+            logger.error(
+                f"Error storing entity relationship: {e}. Traceback: {traceback.format_exc()}"
+            )
+            return f"Error storing entity relationship: {str(e)}. Traceback: {traceback.format_exc()}"
 
     @toolkit_tool
     async def recall_similar_conversation_contexts(self, query: str) -> str:
@@ -251,40 +232,41 @@ class DynamicMemoryToolKit(BaseToolKit):
             if not self.memory_manager:
                 return "Error: Memory manager not available"
 
-            async def _search_contexts():
-                similar_memories = (
-                    await self.memory_manager.search_similar_short_term_memories(
-                        query=query,
-                        limit=3,
-                        threshold=0.7,
-                    )
+            similar_memories = (
+                await self.memory_manager.search_similar_short_term_memories(
+                    query=query,
+                    limit=3,
+                    threshold=0.65,
                 )
+            )
 
-                if not similar_memories:
-                    return "No similar conversation contexts found."
+            if not similar_memories:
+                return "No similar conversation contexts found."
 
-                results = ["Similar Conversation Contexts:"]
+            results = [
+                f"Top {len(similar_memories)} Similar Conversation Contexts (May not be relevant, use with caution):"
+            ]
 
-                for memory in similar_memories:
-                    context_summary = [
-                        f"\nConversation id: {memory.conversation_id}\n",
-                        f"Summary:\n{memory.last_conversation_summary}\n",
-                        f"Goal & Status:\n{memory.recent_goal_and_status}\n",
-                        f"Important Context:\n{memory.important_context}\n",
-                        f"User Info:\n{memory.user_info}\n",
-                        f"Agent Beliefs:\n{memory.agent_beliefs}\n",
-                        f"Environment Info:\n{memory.environment_info}\n",
-                        f"Conversation ended at: {memory.timestamp}\n",
-                    ]
-                    results.extend(context_summary)
+            for memory in similar_memories:
+                context_summary = [
+                    f"\nConversation id: {memory.conversation_id}\n",
+                    f"Summary:\n{memory.last_conversation_summary}\n",
+                    f"Goal & Status:\n{memory.recent_goal_and_status}\n",
+                    f"Important Context:\n{memory.important_context}\n",
+                    f"User Info:\n{memory.user_info}\n",
+                    f"Agent Beliefs:\n{memory.agent_beliefs}\n",
+                    f"Environment Info:\n{memory.environment_info}\n",
+                    f"Conversation ended at: {memory.timestamp}\n",
+                ]
+                results.extend(context_summary)
 
-                return "\n".join(results)
-
-            return await _search_contexts()
+            return "\n".join(results)
 
         except Exception as e:
-            logger.error(f"Error searching conversation contexts: {e}")
-            return f"Error searching conversation contexts: {str(e)}"
+            logger.error(
+                f"Error searching conversation contexts: {e}. Traceback: {traceback.format_exc()}"
+            )
+            return f"Error searching conversation contexts: {str(e)}. Traceback: {traceback.format_exc()}"
 
     # @toolkit_tool
     # async def recall_conversation_by_id(self, conversation_id: str) -> str:

@@ -240,7 +240,7 @@ class SQLiteDatabase(BaseDatabase):
         entities: List[str],
         keywords: List[str],
         text_embedding: List[float],
-        entity_embeddings: List[float],
+        entity_embeddings: List[float] | None,
     ) -> Knowledge:
         """Store knowledge with embeddings"""
         async with self.get_connection() as conn:
@@ -270,7 +270,11 @@ class SQLiteDatabase(BaseDatabase):
                 (
                     knowledge_id,
                     json.dumps(text_embedding),
-                    json.dumps(entity_embeddings),
+                    (
+                        json.dumps(entity_embeddings)
+                        if entity_embeddings is not None
+                        else json.dumps([0] * self.connection_config["embedding_size"])
+                    ),
                 ),
             )
 

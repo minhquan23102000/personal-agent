@@ -67,6 +67,21 @@ async def test_store_knowledge(db):
 
 
 @pytest.mark.asyncio
+async def test_store_knowledge_no_entities(db):
+    knowledge = await db.store_knowledge(
+        text="The sky is blue.",
+        entities=[],
+        keywords=[],
+        text_embedding=[0.1] * 364,
+        entity_embeddings=None,
+    )
+    assert isinstance(knowledge, Knowledge)
+    assert knowledge.text == "The sky is blue."
+    assert knowledge.entities == []
+    assert knowledge.keywords == []
+
+
+@pytest.mark.asyncio
 async def test_store_entity_relationship(db):
     relationship = await db.store_entity_relationship(
         relationship_text="Sky has color blue", embedding=[0.3] * 364

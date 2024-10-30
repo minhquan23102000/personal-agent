@@ -13,12 +13,13 @@ from src.memory.models import (
 )
 from src.memory.database.base import BaseDatabase
 from src.memory.embeddings.base import BaseEmbedding
-from src.memory.retrieval.reranker import CrossEncoderReranker
+from src.memory.retrieval.reranker import AdvancedReranker, RerankerConfig
 from src.memory.database.sqlite import SQLiteDatabase
 from src.memory.embeddings.sentence_transformer import SentenceTransformerEmbedding
 from src.memory.memory_toolkit.static_flow.end_conversation import (
     reflection_conversation,
 )
+from src.memory.embeddings import GeminiEmbedding, GeminiEmbeddingConfig
 
 if TYPE_CHECKING:
     from src.agent.base_agent import BaseAgent
@@ -49,7 +50,7 @@ class MemoryManager:
         if embedding_model:
             self.embedding_model = embedding_model
         else:
-            self.embedding_model = SentenceTransformerEmbedding()
+            self.embedding_model = GeminiEmbedding(config=GeminiEmbeddingConfig())
 
         if database:
             self.db = database
@@ -63,7 +64,7 @@ class MemoryManager:
         self.max_search_entity_results = max_search_entity_results
         self.use_reranker = use_reranker
         if use_reranker:
-            self.reranker = CrossEncoderReranker()
+            self.reranker = AdvancedReranker(config=RerankerConfig())
 
     def set_agent(self, agent: "BaseAgent") -> None:
         self.agent = agent
@@ -97,11 +98,16 @@ class MemoryManager:
         text: str,
         entities: List[str],
         keywords: List[str],
-        text_embedding: List[float],
-        entity_embeddings: List[float],
     ) -> Knowledge:
         """Store new knowledge with embeddings"""
         try:
+            text_embedding = await self.embedding_model.get_text_embedding(text)
+            if entities:
+                entity_embeddings = await self.embedding_model.get_text_embedding(
+                    ", ".join(entities)
+                )
+            else:
+                entity_embeddings = None
             return await self.db.store_knowledge(
                 text=text,
                 entities=entities,
@@ -114,14 +120,24 @@ class MemoryManager:
             raise
 
     async def search_similar_knowledge(
-        self, query_embedding: List[float], limit: int = 5
+        self, query: str, limit: int = 5, threshold: float | None = None
     ) -> List[Knowledge]:
         """Search for similar knowledge using vector similarity"""
         try:
-            return await self.db.search_similar_knowledge(
+            query_embedding = await self.embedding_model.get_text_embedding(query)
+            rs = await self.db.search_similar_knowledge(
                 query_embedding=query_embedding,
                 limit=limit,
             )
+            # rerank results
+            rs = await self._rerank_results(
+                query=query,
+                items=rs,
+                text_extractor=lambda x: x.text,
+                limit=limit,
+                threshold=threshold,
+            )
+            return rs
         except Exception as e:
             logger.error(f"Error searching knowledge: {str(e)}")
             raise
@@ -129,10 +145,10 @@ class MemoryManager:
     async def store_entity_relationship(
         self,
         relationship_text: str,
-        embedding: List[float],
     ) -> EntityRelationship:
         """Store entity relationship with embedding"""
         try:
+            embedding = await self.embedding_model.get_text_embedding(relationship_text)
             return await self.db.store_entity_relationship(
                 relationship_text=relationship_text,
                 embedding=embedding,
@@ -142,14 +158,24 @@ class MemoryManager:
             raise
 
     async def search_similar_entities(
-        self, query_embedding: List[float], limit: int = 10
+        self, query: str, limit: int = 10, threshold: float | None = None
     ) -> List[EntityRelationship]:
         """Search for similar entity relationships using vector similarity"""
         try:
-            return await self.db.search_similar_entities(
+            query_embedding = await self.embedding_model.get_text_embedding(query)
+            rs = await self.db.search_similar_entities(
                 query_embedding=query_embedding,
                 limit=limit,
             )
+            # rerank results
+            rs = await self._rerank_results(
+                query=query,
+                items=rs,
+                text_extractor=lambda x: x.relationship_text,
+                limit=limit,
+                threshold=threshold,
+            )
+            return rs
         except Exception as e:
             logger.error(f"Error searching entities: {str(e)}")
             raise
@@ -161,10 +187,9 @@ class MemoryManager:
         conversation_summary: str,
         improve_prompt: str,
         reward_score: float,
-        feedback_text: Optional[str] = None,
-        example: Optional[str] = None,
-        improvement_suggestion: Optional[str] = None,
-        environment_info: Optional[str] = None,
+        feedback_text: str = "",
+        example: str = "",
+        improvement_suggestion: str = "",
     ) -> ConversationSummary:
         """Store conversation summary with feedback and improvements"""
         try:
@@ -227,22 +252,6 @@ class MemoryManager:
             logger.error(f"Error retrieving best performing prompts: {str(e)}")
             raise
 
-    async def _calculate_similarity(
-        self,
-        query_embedding: List[float],
-        target_embedding: List[float],
-    ) -> float:
-        """Calculate cosine similarity between embeddings
-
-        Args:
-            query_embedding: Query embedding vector
-            target_embedding: Target embedding vector
-
-        Returns:
-            float: Cosine similarity score
-        """
-        return float(sum(a * b for a, b in zip(query_embedding, target_embedding)))
-
     async def _rerank_results(
         self,
         query: str,
@@ -265,8 +274,8 @@ class MemoryManager:
         if not self.use_reranker:
             return items[:limit]
 
-        # Second stage: Cross-encoder reranking
-        reranked_items = await self.reranker.rerank(
+        # Second stage: Rerank results
+        reranked_items = self.reranker.rerank(
             query=query,
             items=items,  # Initial scores don't matter for reranking
             text_extractor=text_extractor,

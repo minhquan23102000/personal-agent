@@ -91,7 +91,7 @@ class BaseDatabase(ABC):
         entities: List[str],
         keywords: List[str],
         text_embedding: List[float],
-        entity_embeddings: List[float],
+        entity_embeddings: List[float] | None,
     ) -> Knowledge:
         """Store knowledge with embeddings"""
         pass
