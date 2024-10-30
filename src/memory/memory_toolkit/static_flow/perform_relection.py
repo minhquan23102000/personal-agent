@@ -21,6 +21,8 @@ from tenacity import retry, stop_after_attempt
 if TYPE_CHECKING:
     from src.agent.base_agent import BaseAgent
 
+from src.agent.error_prompt import format_error_message
+
 
 class BaseSelfReflection(BaseModel):
     """Model for self-reflection response."""
@@ -54,7 +56,7 @@ class BaseSelfReflection(BaseModel):
     USER FEEDBACK:
     {user_feedback}
     
-    YOUR CURRENT SYSTEM PROMPT:
+    AGENT (YOUR) SYSTEM PROMPT:
     {system_prompt}
     """
 )
@@ -81,14 +83,14 @@ async def perform_self_reflection(
             config = {}
 
             config["messages"] = base_self_reflection_prompt(
-                system_prompt=agent._build_system_prompt(),
+                system_prompt=agent.system_prompt,
                 history=agent._build_prompt(include_system_prompt=False),
                 user_feedback=user_feedback,
             )
 
             if errors:
                 config["computed_fields"] = {
-                    "previous_errors": f"Previous Errors: {errors}"
+                    "previous_errors": f"Previous Errors: {format_error_message(errors)}"
                 }
 
             return config

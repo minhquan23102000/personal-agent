@@ -15,7 +15,6 @@ from rich import print
 
 async def main():
     agent = DebugAgent()
-    print(agent.get_tools())
     await agent.run()
     # agent.history = history_sample
     # summary = await generate_conversation_summary(agent)

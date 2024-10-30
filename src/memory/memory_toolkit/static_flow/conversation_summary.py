@@ -5,7 +5,8 @@ from typing import List, TYPE_CHECKING
 from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_exponential
 from mirascope.retries.tenacity import collect_errors
-from pydantic import AfterValidator, ValidationError
+from pydantic import ValidationError
+from src.agent.error_prompt import format_error_message
 
 if TYPE_CHECKING:
     from src.agent.base_agent import BaseAgent
@@ -59,7 +60,7 @@ async def generate_conversation_summary(agent: "BaseAgent") -> BaseConversationS
 
         if errors:
             config["computed_fields"] = {
-                "previous_errors": f"Previous Errors: {errors}"
+                "previous_errors": f"Previous Errors: {format_error_message(errors)}"
             }
 
         return config

@@ -9,12 +9,12 @@ from src.memory.memory_manager import MemoryManager
 class DynamicMemoryToolKit(BaseToolKit):
     """Toolkit for managing memory operations including storage and retrieval. Use this toolkit to store and retrieve knowledge, facts, entities, relationships, and conversation contexts."""
 
-    __namespace__ = "agent_long_term_memory"
+    __namespace__ = "long_term_memory_database"
 
     memory_manager: MemoryManager
 
     @toolkit_tool
-    async def store_knowledge_to_memory(
+    async def store_update_knowledge(
         self,
         knowledge_text: List[str],
         entities: List[str],
@@ -33,7 +33,7 @@ class DynamicMemoryToolKit(BaseToolKit):
             self: self.
             knowledge_text (List[str]): A list of knowledge strings to be stored.
             entities (List[str]): A list of entities related to the knowledge.
-            relationship_text (List[str]): A list of relationship strings to be stored, item format "{entity1} {relationship} {entity2}", keep it short and concise.
+            relationship_text (List[str]): A list of concise relationship descriptions between the entities, formatted as "entity1" "relationship" "entity2".
         """
 
         try:
@@ -184,7 +184,7 @@ class DynamicMemoryToolKit(BaseToolKit):
             return f"Error searching relationships: {str(e)}"
 
     @toolkit_tool
-    async def store_entities_relationship_to_memory(
+    async def store_update_entities_facts(
         self,
         entities: List[str],
         relationship_text: List[str],
@@ -200,7 +200,7 @@ class DynamicMemoryToolKit(BaseToolKit):
         Args:
             self: self.
             entities (List[str]): A list of entity names to store relationships for.
-            relationship_text (List[str]): A list of relationship descriptions between the entities, item format "{entity1} {relationship} {entity2}", keep it short and concise.
+            relationship_text (List[str]): A list of concise relationship descriptions between the entities, formatted as "entity1" "relationship" "entity2".
         """
         try:
             if not self.memory_manager:

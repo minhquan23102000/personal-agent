@@ -13,26 +13,39 @@ def parse_docstring_tool_func(func: Callable) -> dict:
     """
     function_name = func.__name__
     if func.__doc__:
-        return {function_name: func.__doc__.strip()}
-    return {function_name: "No instruction present."}
+        return {"tool_name": function_name, "tool_description": func.__doc__.strip()}
+    return {"tool_name": function_name, "tool_description": "No instruction present."}
 
 
 def parse_docstring_mirascope_tool(tool: BaseTool) -> dict:
 
-    return {tool._name(): tool._description()}
+    return {"tool_name": tool._name(), "tool_description": tool._description()}
 
 
 PROMPT_TOOL_TEMPLATE = """
-Tool: {tool_name}
-Tool Description: 
+<Tool>
+<Name>{tool_name}</Name>
+<Description>
 {tool_description}
-""".strip()
+</Description>
+</Tool>
+"""
+
+
+def clean_args_in_tool_description(tool_description: str) -> str:
+    return tool_description.split("Args:")[0].strip()
 
 
 def build_prompt_from_tool(tool: BaseTool | Callable) -> str:
     if isinstance(tool, BaseTool):
-        return PROMPT_TOOL_TEMPLATE.format(**parse_docstring_mirascope_tool(tool))
-    return PROMPT_TOOL_TEMPLATE.format(**parse_docstring_tool_func(tool))
+        tool_info = parse_docstring_mirascope_tool(tool)
+    else:
+        tool_info = parse_docstring_tool_func(tool)
+
+    tool_info["tool_description"] = clean_args_in_tool_description(
+        tool_info["tool_description"]
+    )
+    return PROMPT_TOOL_TEMPLATE.format(**tool_info)
 
 
 def get_list_tools_name(tools: list[BaseTool | Callable]) -> list[str]:

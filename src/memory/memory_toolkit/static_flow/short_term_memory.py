@@ -14,6 +14,8 @@ from loguru import logger
 if TYPE_CHECKING:
     from src.agent.base_agent import BaseAgent
 
+from src.agent.error_prompt import format_error_message
+
 
 class BaseShortTermMemoryUpdate(BaseModel):
     """Model for short-term memory updates."""
@@ -34,7 +36,7 @@ class BaseShortTermMemoryUpdate(BaseModel):
         description="How the conversation has changed you? Describe detailed of your personality, role, name, gender, language, style, age, profile, historical background, relationship with user and anything beyond."
     )
     environment_info: str = Field(
-        description="Describe the environment you are in. Anything you can experience, observe, realize, understand, feel, etc. Objects, resources, people, time, space, etc. Only include what is most meaningful to you."
+        description="Describe the environment (both digital environment or physical environment) you are in. Anything you can experience, observe, realize, understand, feel, etc. Objects, resources, people, time, space, etc. Only include what is most meaningful to you."
     )
 
 
@@ -82,7 +84,7 @@ async def generate_updated_short_term_memory(
 
             if errors:
                 config["computed_fields"] = {
-                    "previous_errors": f"Previous Errors: {errors}"
+                    "previous_errors": f"Previous Errors: {format_error_message(errors)}"
                 }
 
             return config

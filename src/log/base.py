@@ -1,0 +1,9 @@
+from typing import Any, Protocol, Literal
+
+
+class BasePrinter(Protocol):
+    def print_user_message(self, message: Any) -> None: ...
+    def print_agent_message(self, message: Any) -> None: ...
+    def print_system_message(
+        self, message: Any, type: Literal["info", "warning", "error"] = "info"
+    ) -> None: ...
