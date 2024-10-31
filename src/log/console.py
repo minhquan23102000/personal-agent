@@ -16,7 +16,8 @@ class ConsolePrinter:
             self.console.print(message)
         str_output = capture.get()
         text = Text.from_markup(str_output)
-        self.console.print(Panel(text, title=title, padding=2), style=style)
+        panel = Panel(text, title=title, padding=2, border_style=style)
+        self.console.print(panel)
 
     def print_user_message(self, message: Any) -> None:
         # self.console.print("[User]", style="bold blue", justify="left")

@@ -1409,11 +1409,13 @@ dependencies = [
     { name = "mirascope", extra = ["gemini", "litellm", "tenacity"] },
     { name = "pyhumps" },
     { name = "pyperclip" },
+    { name = "pyrootutils" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "rerankers", extra = ["api"] },
     { name = "rich" },
     { name = "sqlite-vec" },
+    { name = "wikipedia" },
 ]
 
 [package.metadata]
@@ -1424,11 +1426,13 @@ requires-dist = [
     { name = "mirascope", extras = ["gemini", "litellm", "tenacity"], specifier = ">=1.6.0" },
     { name = "pyhumps", specifier = ">=3.8.0" },
     { name = "pyperclip", specifier = ">=1.9.0" },
+    { name = "pyrootutils", specifier = ">=1.0.4" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "rerankers", extras = ["api"], specifier = ">=0.5.3" },
     { name = "rich", specifier = ">=13.9.3" },
     { name = "sqlite-vec", specifier = ">=0.1.3" },
+    { name = "wikipedia", specifier = ">=1.4.0" },
 ]
 
 [[package]]
@@ -1781,6 +1785,18 @@ name = "pyperclip"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/30/23/2f0a3efc4d6a32f3b63cdff36cd398d9701d26cda58e3ab97ac79fb5e60d/pyperclip-1.9.0.tar.gz", hash = "sha256:b7de0142ddc81bfc5c7507eea19da920b92252b548b96186caf94a5e2527d310", size = 20961 }
+
+[[package]]
+name = "pyrootutils"
+version = "1.0.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dotenv" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/37/7d/c5f3fb44dc98a72249a17a49e28bce4aaa6758ce9e37e77648cdc1857baf/pyrootutils-1.0.4.tar.gz", hash = "sha256:f58aac67147bbab20938b7b783cb2f4670d6329a33c6640233854976538fc5f2", size = 5133 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1c/6f/ed601aec632d908b86adbad0e1cc712f7073faf697134fb0465a3fbcc512/pyrootutils-1.0.4-py3-none-any.whl", hash = "sha256:8bbf25425278693168ae03b167aa6509422dc21853a6ee01d5d5e40601a89f90", size = 5831 },
+]
 
 [[package]]
 name = "pytest"
@@ -2368,6 +2384,16 @@ sdist = { url = "https://files.pythonhosted.org/packages/0b/02/ae6ceac1baeda5308
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f4/24/2a3e3df732393fed8b3ebf2ec078f05546de641fe1b667ee316ec1dcf3b7/webencodings-0.5.1-py2.py3-none-any.whl", hash = "sha256:a0af1213f3c2226497a97e2b3aa01a7e4bee4f403f95be16fc9acd2947514a78", size = 11774 },
 ]
+
+[[package]]
+name = "wikipedia"
+version = "1.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "beautifulsoup4" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/67/35/25e68fbc99e672127cc6fbb14b8ec1ba3dfef035bf1e4c90f78f24a80b7d/wikipedia-1.4.0.tar.gz", hash = "sha256:db0fad1829fdd441b1852306e9856398204dc0786d2996dd2e0c8bb8e26133b2", size = 27748 }
 
 [[package]]
 name = "win32-setctime"

@@ -3,6 +3,5 @@ You possess extensive expertise in Python, SQL, and AI, with a strong focus on A
 
 # RULES
 * Use keyword arguments in function calls.
-* Import modules using absolute paths from the `src` directory (e.g., `from src.memory.models import ShortTermMemory`). 
 * Ensure your code is clean and readable for future reference.
 * Always use dataclasses for class, object implementations.
