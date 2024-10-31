@@ -5,6 +5,7 @@ import rich
 from rich.console import Console
 from rich.text import Text
 from rich.panel import Panel
+from rpds import List
 
 
 @dataclass
@@ -47,6 +48,9 @@ class ConsolePrinter:
         # )
         # self.console.print(message, style=f"bold {color}", justify="left")
         self.print_box(message, title=f"System {type.upper()}", style=f"bold {color}")
+
+    def print_history(self, history: list) -> None:
+        self.console.print(history, style="bold green")
 
 
 if __name__ == "__main__":

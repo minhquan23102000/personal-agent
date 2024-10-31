@@ -1,20 +1,37 @@
 import asyncio
-from typing import List, Optional
+from typing import List, Optional, Annotated
 from bs4 import BeautifulSoup
 import requests
 from urllib.parse import urlparse
 from mirascope.core import BaseTool
-from pydantic import Field
-import asyncio
+from pydantic import Field, ConfigDict, model_validator, AfterValidator
+
+
+def validate_urls_count(urls: List[str]) -> List[str]:
+    if not 1 <= len(urls) <= 5:
+        raise ValueError("Number of URLs must be between 1 and 5")
+    return urls
 
 
 class WebReaderTool(BaseTool):
-    """This tool allows you to read and extract content from multiple web pages. After conducting a web search, you can use it to review the details of the pages you find."""
+    """This tool allows you to read and extract content from multiple web pages. After conducting a web search, you can use it to review the details of the pages you find.
 
-    urls: List[str] = Field(
+    Input a list of URLs to read content from.
+
+    Examples:
+        urls: ["https://example.com", "https://example.org"]
+    """
+
+    urls: Annotated[List[str], AfterValidator(validate_urls_count)] = Field(
         ...,
-        description="List of URLs to read content from",
-        examples=[["https://example.com/article1", "https://example.com/article2"]],
+        description="List of URLs to read content from. Minimum is 1 URL, Maximum is 5 URLs.",
+        examples=[["https://example.com", "https://example.org"]],
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [{"urls": ["https://example.com", "https://example.org"]}]
+        }
     )
 
     def __clean_text(self, text: str) -> str:

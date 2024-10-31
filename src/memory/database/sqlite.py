@@ -24,7 +24,7 @@ from src.config import DATA_DIR
 @dataclass
 class SQLiteDatabase(BaseDatabase):
     db_uri: str
-    embedding_size: int = 364
+    embedding_size: int
     connection_config: dict = field(init=False)
 
     def __post_init__(self):
@@ -100,6 +100,7 @@ class SQLiteDatabase(BaseDatabase):
                 agent_beliefs TEXT NOT NULL,
                 agent_info TEXT NOT NULL,
                 environment_info TEXT NOT NULL,
+                how_to_address_user TEXT DEFAULT "",
                 timestamp DATETIME NOT NULL
             )
             """
@@ -608,6 +609,7 @@ class SQLiteDatabase(BaseDatabase):
         agent_beliefs: str,
         agent_info: str,
         environment_info: str,
+        how_to_address_user: str,
         summary_embedding: List[float],
     ) -> ShortTermMemory:
         """Store short-term memory state with embedding"""
@@ -616,9 +618,9 @@ class SQLiteDatabase(BaseDatabase):
                 """
                 INSERT INTO short_term_memory_state (
                     conversation_id, user_info, last_conversation_summary, recent_goal_and_status,
-                    important_context, agent_beliefs, agent_info, environment_info, timestamp
+                    important_context, agent_beliefs, agent_info, environment_info, how_to_address_user, timestamp
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     conversation_id,
@@ -629,6 +631,7 @@ class SQLiteDatabase(BaseDatabase):
                     agent_beliefs,
                     agent_info,
                     environment_info,
+                    how_to_address_user,
                     datetime.now(),
                 ),
             )
@@ -660,6 +663,7 @@ class SQLiteDatabase(BaseDatabase):
                 agent_beliefs=agent_beliefs,
                 agent_info=agent_info,
                 environment_info=environment_info,
+                how_to_address_user=how_to_address_user,
                 timestamp=datetime.now(),
             )
 
@@ -670,7 +674,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_connection() as conn:
             query = """
                 SELECT conversation_id, user_info, last_conversation_summary, recent_goal_and_status,
-                       important_context, agent_beliefs, agent_info, environment_info, timestamp
+                       important_context, agent_beliefs, agent_info, environment_info, how_to_address_user, timestamp
                 FROM short_term_memory_state
             """
             params = []
@@ -695,7 +699,8 @@ class SQLiteDatabase(BaseDatabase):
                 agent_beliefs=row[5],
                 agent_info=row[6],
                 environment_info=row[7],
-                timestamp=datetime.fromisoformat(row[8]),
+                how_to_address_user=row[8],
+                timestamp=datetime.fromisoformat(row[9]),
             )
 
     async def get_latest_conversation_summary(self) -> Optional[ConversationSummary]:

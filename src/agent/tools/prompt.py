@@ -22,8 +22,7 @@ def parse_docstring_mirascope_tool(tool: BaseTool) -> dict:
     return {"tool_name": tool._name(), "tool_description": tool._description()}
 
 
-PROMPT_TOOL_TEMPLATE = """
-<Tool>
+PROMPT_TOOL_TEMPLATE = """<Tool>
 <Name>{tool_name}</Name>
 <Description>
 {tool_description}

@@ -60,6 +60,7 @@ class BaseDatabase(ABC):
         agent_beliefs: str,
         agent_info: str,
         environment_info: str,
+        how_to_address_user: str,
         summary_embedding: List[float],
     ) -> ShortTermMemory:
         """Store short-term memory state with embedding"""

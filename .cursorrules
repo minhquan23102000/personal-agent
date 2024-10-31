@@ -5,3 +5,5 @@ You possess extensive expertise in Python, SQL, and AI, with a strong focus on A
 * Use keyword arguments in function calls.
 * Ensure your code is clean and readable for future reference.
 * Always use dataclasses for class, object implementations.
+* Always following best practices for code quality.
+* Following AAA (Arrange-Act-Assert) pattern in tests.

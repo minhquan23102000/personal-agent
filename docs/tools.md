@@ -104,7 +104,7 @@ class GetBookAuthor(BaseTool):
 
     model_config = ConfigDict(
         json_schema_extra={"examples": [{"title": "The Name of the Wind"}]}
-    )
+    ) ### REMEMBER TO ADD THIS WHEN YOU ADD EXAMPLES IMPORTANTLY NOTE !!!!!
 
     def call(self) -> str:
         if self.title == "The Name of the Wind":

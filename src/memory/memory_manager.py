@@ -418,6 +418,7 @@ class MemoryManager:
         agent_beliefs: str,
         agent_info: str,
         environment_info: str,
+        how_to_address_user: str,
     ) -> ShortTermMemory:
         """Store short-term memory state with embedding"""
         try:
@@ -436,6 +437,7 @@ class MemoryManager:
                 agent_beliefs=agent_beliefs,
                 agent_info=agent_info,
                 environment_info=environment_info,
+                how_to_address_user=how_to_address_user,
                 summary_embedding=summary_embedding,
             )
         except Exception as e:

@@ -20,6 +20,9 @@ class BaseShortTermMemoryUpdate(BaseModel):
     user_info: str = Field(
         description="Any new details regarding the user's preferences, personality, background, needs, styles, habits, beliefs, your relationship with the user, how you addressed the user, or any other relevant information you have about the user."
     )
+    how_to_address_user: str = Field(
+        description="How you address the user? Give a concise and short note. Keep language simple and direct."
+    )
     important_context: str = Field(
         description="Capture any significant contextual elements that should be retained for future reference. Should be compressed and short as much as possible. Should be a list of bullet points in short and concise."
     )
@@ -33,7 +36,7 @@ class BaseShortTermMemoryUpdate(BaseModel):
         description="Document the all the goals the user has set and their progress or status. Should be a list of bullet points in short and concise. If goal is completed, remove it from the list."
     )
     environment_info: str = Field(
-        description="Describe the environment (both digital environment or physical environment) you are in. Anything you can experience, observe, realize, understand, feel, etc. Objects, resources, people, time, space, etc. Only note what is most meaningful and useful to you."
+        description="Describe the environment surrounding. Anything you can experience, observe, realize, thought, hypothesis, understand, feel, etc. Objects, resources, people, time, space, etc. Only note what is most meaningful and useful to you."
     )
 
 

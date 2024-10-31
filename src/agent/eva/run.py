@@ -1,16 +1,28 @@
 import asyncio
 from dataclasses import dataclass, field
 
+from pathlib import Path
+from pyrootutils import setup_root
+
+
+setup_root(".", dotenv=True, pythonpath=True, cwd=True)
+
+print(Path.cwd())
+
+
+# ------------------------------------------------------------
+
 from src.agent.base_agent import BaseAgent
 from src.memory import MemoryManager
 
 from src.config import GOOGLE_API_KEY_LIST
+from src.agent.tools.search import (
+    WikipediaSearchContentTool,
+    WikipediaSearchRelatedArticleTool,
+    DuckDuckGoSearchTool,
+    WebReaderTool,
+)
 
-from pathlib import Path
-
-from pyrootutils import setup_root
-
-setup_root(".", dotenv=True, pythonpath=True, cwd=True)
 
 SYSTEM_PROMPT_PATH = Path(__file__).parent / "inital_system_prompt.md"
 
@@ -29,6 +41,14 @@ class Eva(BaseAgent):
     def __post_init__(self):
         self.memory_manager = MemoryManager(db_uri=self.agent_id)
         super().__post_init__()
+        self.add_tools(
+            [
+                WikipediaSearchContentTool,
+                WikipediaSearchRelatedArticleTool,
+                DuckDuckGoSearchTool,
+                WebReaderTool,
+            ]
+        )
 
 
 if __name__ == "__main__":

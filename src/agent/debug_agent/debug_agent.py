@@ -5,7 +5,12 @@ from src.memory import MemoryManager
 
 from rich import print
 from src.config import GOOGLE_API_KEY_LIST
-
+from src.agent.tools.search import (
+    WebReaderTool,
+    WikipediaSearchContentTool,
+    WikipediaSearchRelatedArticleTool,
+    DuckDuckGoSearchTool,
+)
 from pathlib import Path
 
 SYSTEM_PROMPT_PATH = Path(__file__).parent / "inital_system_prompt.md"
@@ -25,3 +30,11 @@ class DebugAgent(BaseAgent):
     def __post_init__(self):
         self.memory_manager = MemoryManager(db_uri=self.agent_id)
         super().__post_init__()
+        self.add_tools(
+            [
+                WebReaderTool,
+                WikipediaSearchContentTool,
+                WikipediaSearchRelatedArticleTool,
+                DuckDuckGoSearchTool,
+            ]
+        )

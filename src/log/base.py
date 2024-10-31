@@ -1,4 +1,4 @@
-from typing import Any, Protocol, Literal
+from typing import Any, Protocol, Literal, List
 
 
 class BasePrinter(Protocol):
@@ -7,3 +7,4 @@ class BasePrinter(Protocol):
     def print_system_message(
         self, message: Any, type: Literal["info", "warning", "error"] = "info"
     ) -> None: ...
+    def print_history(self, history: list) -> None: ...

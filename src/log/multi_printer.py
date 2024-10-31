@@ -21,3 +21,7 @@ class MultiPrinter(BasePrinter):
     def print_agent_message(self, message: Any) -> None:
         for printer in self.printers:
             printer.print_agent_message(message)
+
+    def print_history(self, history: list) -> None:
+        for printer in self.printers:
+            printer.print_history(history)

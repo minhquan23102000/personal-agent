@@ -6,7 +6,10 @@ def format_error_message(errors: list[ValidationError]) -> str:
 
     final_error_messages = []
     for error in error_messages:
-        error_msg = "\n".join(str(item) for item in error)
+        error_msg = "\n".join(
+            f"Field: {item['loc']}, Validation Error: {item['msg']}, but actual input is: {item['input']}"
+            for item in error
+        )
         final_error_messages.append(error_msg)
 
     formatted_message = "\n".join(str(error) for error in final_error_messages)

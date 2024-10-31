@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from typing import Optional, List
 import wikipedia
-from pydantic import Field
+from pydantic import Field, ConfigDict
 
 from mirascope.core import BaseTool
 
 
-class WikipediaSearchTool(BaseTool):
+class WikipediaSearchContentTool(BaseTool):
     """
     A tool for searching Wikipedia articles (a big library of knowledge about the world) and retrieving content.
     This tool can search for articles, get summaries, and retrieve full content.
@@ -20,26 +20,13 @@ class WikipediaSearchTool(BaseTool):
     query: str = Field(
         ...,
         description="The search query or article title to look up on Wikipedia",
-        examples=[
-            "Albert Einstein",
-            "Python (programming language)",
-            "Machine Learning",
-        ],
     )
-
-    sentences: Optional[int] = Field(
-        default=5,
-        description="Number of sentences to return in the summary (default: 5)",
-        examples=[3, 5, 10],
-    )
-
     full_content: bool = Field(
-        default=False,
+        ...,
         description="Whether to return the full article content instead of just a summary",
-        examples=[True, False],
     )
 
-    def call(self) -> str:
+    async def call(self) -> str:
         try:
             # Search for the page
             search_results = wikipedia.search(self.query)
@@ -59,7 +46,7 @@ class WikipediaSearchTool(BaseTool):
 
             # Get the summary with specified number of sentences
             return wikipedia.summary(
-                search_results[0], sentences=self.sentences, auto_suggest=False
+                search_results[0], sentences=10, auto_suggest=False
             )
 
         except wikipedia.exceptions.PageError:
@@ -68,7 +55,7 @@ class WikipediaSearchTool(BaseTool):
             return f"An error occurred while searching Wikipedia: {str(e)}"
 
 
-class WikipediaRelatedTool(BaseTool):
+class WikipediaSearchRelatedArticleTool(BaseTool):
     """
     A tool for finding related Wikipedia articles based on a search query.
     Returns a list of related article titles that can be used for further research.
@@ -82,19 +69,12 @@ class WikipediaRelatedTool(BaseTool):
     query: str = Field(
         ...,
         description="The search query to find related Wikipedia articles",
-        examples=["Quantum Physics", "Artificial Intelligence", "World War II"],
     )
 
-    max_results: int = Field(
-        default=5,
-        description="Maximum number of related articles to return",
-        examples=[5, 10, 15],
-    )
-
-    def call(self) -> str:
+    async def call(self) -> str:
         try:
             # Search for related articles
-            related_articles = wikipedia.search(self.query, results=self.max_results)
+            related_articles = wikipedia.search(self.query, results=10)
 
             if not related_articles:
                 return f"No related Wikipedia articles found for '{self.query}'"
