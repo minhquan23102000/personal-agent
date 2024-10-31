@@ -58,7 +58,7 @@ class BaseAgent:
     api_keys: list[str] | None = None
     rotating_api_keys: RotatingList | None = None
     api_key_env_var: str | None = None
-    max_thought_without_tools: int = 5
+    max_thought_without_tools: int = 3
     max_retries: int = 3
     printer: MultiPrinter = field(
         default_factory=lambda: MultiPrinter([ConsolePrinter()])
@@ -113,8 +113,9 @@ class BaseAgent:
 # CURRENT TIME: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 # SYSTEM INSTRUCTIONS:
-
+<>
 {self.system_prompt}
+</>
             """
         ).strip()
 
@@ -159,7 +160,9 @@ class BaseAgent:
         {short_term_memory_prompt}
         
         # LIST OF TOOLS YOU CAN ACCESS (REMEMBER TO USE THEM WHEN NECESSARY): 
+        <>
         {tools_prompt}
+        </>
         
         MESSAGES: {history}
         """
@@ -195,10 +198,10 @@ class BaseAgent:
         """Thought and action reasoning."""
 
         feeling: str = pydantic.Field(
-            description="Your feeling about the current situation, obervation. Using short keywords to describe your feeling, format in uppercase. If you don't have any feeling, just leave this empty string."
+            description="Note your feeling about the current situation, obervation. Using short keywords to describe your feeling, format in uppercase. If you don't have any feeling, just leave this empty string."
         )
         thought: str = pydantic.Field(
-            description="Your thought or plan for the current situation, obervation."
+            description="Note your thought or plan for the current situation, obervation. Be concise and clear."
         )
         goal_completed: bool = pydantic.Field(
             description="True if you think you have completed the final goal instructed by user or you have the final answer. False otherwise.",
@@ -208,7 +211,7 @@ class BaseAgent:
             description="Decide if you should halt actions and talk to the user. Otherwise, return False."
         )
         action: str = pydantic.Field(
-            description="Identify the most effective actions to take. It is possible to combine multiple actions, but be mindful that some may not be feasible or easy to execute simultaneously, so it recommend is execute one action at a time if you are not confident."
+            description="Identify the most effective actions to take. It is possible to combine multiple actions, but be mindful that some may not be feasible or easy to execute simultaneously, unless you are confident."
         )
         tools: List[str] = pydantic.Field(
             description="Note the tools you will use for the action you are going to take. Else leave it empty."
@@ -253,7 +256,9 @@ class BaseAgent:
         {previous_errors}
         
         ## TOOLS YOU CAN ACCESS:
+        <>
         {tools_names:list}
+        </>
         
         Reflect on the previous message or output, noting your thoughts and feelings regarding the current situation and observations. Subsequently, determine the appropriate actions to take.
 
@@ -271,7 +276,7 @@ class BaseAgent:
         messages = self._build_prompt()
 
         if errors:
-            previous_errors = f"Previous Errors: {format_error_message(errors)}"
+            previous_errors = f"Previous Errors: <>{format_error_message(errors)}</>"
         else:
             previous_errors = ""
 
@@ -367,12 +372,12 @@ class BaseAgent:
         """Format the reasoning response."""
         return inspect.cleandoc(
             f"""
-            Feeling: {response.feeling}
-            Thought: {response.thought}
+            My feeling: {response.feeling}
+            My thought: {response.thought}
             Do I reach the final goal: {"Yes" if response.goal_completed else "No"}
-            Should I stop my chain of thought and talk to my Master: {"Yes" if response.talk_to_user else "No"}
-            Action: {response.action}
-            Execute tools in sequence: {response.tools}
+            Should I stop my chain of thought: {"Yes" if response.talk_to_user else "No"}
+            Action I should take: {response.action}
+            Tools I should use: {response.tools}
             """
         )
 
@@ -398,15 +403,16 @@ class BaseAgent:
             tool_action_response = await self._default_call()  # type: ignore
         else:
             action_query = Messages.User(
-                f"There are some error in the last step when you use tools: {tools}. You pass the wrong parameters to the tools: {format_error_message(errors)}."
+                f"There are some error in the last step when you use tools: {tools}."
+                f" You pass the wrong parameters to the tools: <> {format_error_message(errors)} </>."
                 f" Correct these parameters and re-execute the action: {action}."
             )
             self.history.append(
                 action_query
             )  # append to history for agent learn from the mistaske.
-            self.printer.print_user_message(str(action_query))
+            self.printer.print_user_message(action_query)
 
-            tool_action_response = await self._default_call(action_query)  # type: ignore
+            tool_action_response = await self._default_call()  # type: ignore
 
         await self._assitant_turn_message(tool_action_response.message_param)
 
@@ -414,23 +420,21 @@ class BaseAgent:
         i = 0
         while not tool_action_response.tools:
             action_query = Messages.User(
-                f"USE THE TOOLS: {tools} to perform the designated action: {action}."
+                f"!!!AUTO MESSAGE REMIND YOU TO USE THE TOOLS: {tools} to perform the designated action: {action}."
             )
-            self.printer.print_user_message(str(action_query))
-            self.history.append(
-                action_query
-            )  # append to history for agent learn from the mistaske.
+            self.printer.print_user_message(action_query)
 
-            tool_action_response = await self._default_call()  # type: ignore
+            tool_action_response = await self._default_call(action_query)  # type: ignore
             await self._assitant_turn_message(tool_action_response.message_param)
-
             self.printer.print_agent_message(tool_action_response.content)
+
             time.sleep(1)
+
             i += 1
-            if i > self.max_thought_without_tools:
+            if i > self.max_retries:
                 break
 
-        if i > self.max_thought_without_tools:
+        if i > self.max_retries:
             mistake_tools_user_response = f"You are experiencing issues with the tools: {tools}. You have attempted to use them multiple times without success. Please proceed to the next step to identify the problem, if you think you can't solve it, please talk to me."
 
             self.history.append(Messages.User(mistake_tools_user_response))
@@ -439,9 +443,9 @@ class BaseAgent:
             # agent response with tools call, process the tools call and return the output to history
             await self._process_tools(tool_action_response.tools, tool_action_response)
 
-            self.history.append(
-                Messages.User("")
-            )  # add empty user message to prevent bad request error
+            # self.history.append(
+            #     Messages.User("")
+            # )  # add empty user message to prevent bad request error
 
     async def _react_loop(self) -> None:
         """React loop to reason and act."""
@@ -456,11 +460,6 @@ class BaseAgent:
             # condition to stop the chain of thought
             talk_to_human = reasoning_response.talk_to_user
             goal_completed = reasoning_response.goal_completed
-
-            if talk_to_human:
-                break
-            if goal_completed:
-                break
 
             formatted_reasoning_response = self.format_reasoning_response(
                 reasoning_response
@@ -505,7 +504,7 @@ class BaseAgent:
 
             # final call to talk to human or when complete task, after react loop complete
             final_response = await self._default_call(
-                query=Messages.User(""), include_tools=False
+                include_tools=False
             )  # type: ignore
             await self._assitant_turn_message(final_response.message_param)
 
@@ -540,7 +539,7 @@ class BaseAgent:
                     break
 
                 query = Messages.User(query)
-                self.printer.print_user_message(str(query))
+                self.printer.print_user_message(query)
 
                 response = await self.step(query)
                 self.printer.print_agent_message(response)

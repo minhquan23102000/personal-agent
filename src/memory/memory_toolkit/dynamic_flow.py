@@ -4,6 +4,7 @@ from mirascope.core import BaseToolKit, toolkit_tool
 import asyncio
 import traceback
 from src.memory.memory_manager import MemoryManager, SearchResult
+import inspect
 
 
 class DynamicMemoryToolKit(BaseToolKit):
@@ -14,13 +15,14 @@ class DynamicMemoryToolKit(BaseToolKit):
     memory_manager: MemoryManager
 
     duplicate_threshold: float = 0.95
+    similarity_threshold: float = 0.5
 
     @toolkit_tool
     async def store_update_knowledge(
         self,
         knowledge_text: List[str],
         entities: List[str],
-        relationship_text: List[str],
+        entities_relationship: List[str],
     ) -> str:
         """Save important information, knowledge, facts to your long-term memory.
 
@@ -31,11 +33,13 @@ class DynamicMemoryToolKit(BaseToolKit):
         - When you have a new feeling
         - When you encounter important information
 
+        Ensure you include all informations, facts, knowledge you want to store in one call.
+
         Args:
             self: self.
-            knowledge_text (List[str]): A list of knowledge strings to be stored.
+            knowledge_text (List[str]): A list of knowledge strings to be stored. Each knowledge should be clear separated from each other, unless they have the same context. Do not join multiple unrelated knowledge into one sentence.
             entities (List[str]): A list of entities related to the knowledge.
-            relationship_text (List[str]): A list of concise relationship descriptions between the entities, formatted as "entity1" "relationship" "entity2".
+            entities_relationship (List[str]): A list of concise relationship descriptions between the entities, formatted as "entity1" "relationship" "entity2".
         """
 
         try:
@@ -63,8 +67,8 @@ class DynamicMemoryToolKit(BaseToolKit):
                             keywords=entities,
                         )
 
-            if relationship_text:
-                for rel_text in relationship_text:
+            if entities_relationship:
+                for rel_text in entities_relationship:
                     similar_rel = await self.memory_manager.search_similar_entities(
                         query=rel_text, threshold=self.duplicate_threshold
                     )
@@ -77,7 +81,7 @@ class DynamicMemoryToolKit(BaseToolKit):
                     )
                     new_relationships.append(rel_text)
 
-            return "Successfully stored knowledge and entities relationships. {}"
+            return f"Successfully stored knowledge: {knowledge_text}, entities: {entities}, entites relationships: {entities_relationship} in Long Term Database."
 
         except Exception as e:
             logger.error(
@@ -102,7 +106,9 @@ class DynamicMemoryToolKit(BaseToolKit):
                 return "Error: Memory manager not available"
 
             knowledge_entries, relationships = (
-                await self.memory_manager.query_knowledge(query=query)
+                await self.memory_manager.query_knowledge(
+                    query=query, threshold=self.similarity_threshold
+                )
             )
 
             results = []
@@ -146,7 +152,7 @@ class DynamicMemoryToolKit(BaseToolKit):
 
             query = ", ".join(entities)
             relationships, related_knowledge = await self.memory_manager.query_entities(
-                query=query
+                query=query, threshold=self.similarity_threshold
             )
 
             results = []
@@ -180,7 +186,7 @@ class DynamicMemoryToolKit(BaseToolKit):
     async def store_update_entities_facts(
         self,
         entities: List[str],
-        relationship_text: List[str],
+        entities_relationships: List[str],
     ) -> str:
         """Store relationships between entities in your long-term memory.
 
@@ -190,16 +196,18 @@ class DynamicMemoryToolKit(BaseToolKit):
         - When you want to explicitly store relationships without associated knowledge
         - When you need to update or add new relationships between known entities
 
+        Ensure you include all entities and relationships you want to store in one call.
+
         Args:
             self: self.
             entities (List[str]): A list of entity names to store relationships for.
-            relationship_text (List[str]): A list of concise relationship descriptions between the entities, formatted as "entity1" "relationship" "entity2".
+            entities_relationships (List[str]): A list of concise and short relationship descriptions between the entities, formatted as "entity1" "relationship" "entity2".
         """
         try:
             if not self.memory_manager:
                 return "Error: Memory manager not available"
 
-            for rel_text in relationship_text:
+            for rel_text in entities_relationships:
                 similar_rel = await self.memory_manager.search_similar_entities(
                     query=rel_text, threshold=self.duplicate_threshold
                 )
@@ -211,7 +219,7 @@ class DynamicMemoryToolKit(BaseToolKit):
                     relationship_text=rel_text
                 )
 
-            return f"Successfully stored entities relationships."
+            return f"Successfully stored entities relationships: {entities_relationships} in Long Term Database."
 
         except Exception as e:
             logger.error(
@@ -233,7 +241,7 @@ class DynamicMemoryToolKit(BaseToolKit):
         The function will search through past conversation contexts using semantic similarity and return the most relevant ones.
 
         Args:
-            query (str): The query string to search for similar conversation contexts.
+            query (str): The query string to search for similar conversation contexts. Make sure it describes details of the current situation and context, for efficient search.
         """
         try:
             if not self.memory_manager:
@@ -243,7 +251,7 @@ class DynamicMemoryToolKit(BaseToolKit):
                 await self.memory_manager.search_similar_short_term_memories(
                     query=query,
                     limit=3,
-                    threshold=0.65,
+                    threshold=max(self.similarity_threshold - 0.25, 0.1),
                 )
             )
 
@@ -255,17 +263,23 @@ class DynamicMemoryToolKit(BaseToolKit):
             ]
 
             for memory in similar_memories:
-                context_summary = [
-                    f"\nConversation id: {memory.conversation_id}\n",
-                    f"Summary:\n{memory.last_conversation_summary}\n",
-                    f"Goal & Status:\n{memory.recent_goal_and_status}\n",
-                    f"Important Context:\n{memory.important_context}\n",
-                    f"User Info:\n{memory.user_info}\n",
-                    f"Agent Beliefs:\n{memory.agent_beliefs}\n",
-                    f"Environment Info:\n{memory.environment_info}\n",
-                    f"Conversation ended at: {memory.timestamp}\n",
-                ]
-                results.extend(context_summary)
+                context_summary = inspect.cleandoc(
+                    f"""
+                    <>
+                    Conversation id: {memory.item.conversation_id}
+                    Summary: {memory.item.last_conversation_summary}
+                    Goal & Status: {memory.item.recent_goal_and_status}
+                    Important Context: {memory.item.important_context}
+                    User Info: {memory.item.user_info}
+                    Agent Beliefs: {memory.item.agent_beliefs}
+                    Environment Info: {memory.item.environment_info}
+                    Conversation ended at: {memory.item.timestamp}
+                    Conversation similarity score: {memory.score:.2f}
+                    </>
+                    """
+                )
+
+                results.append(context_summary)
 
             return "\n".join(results)
 

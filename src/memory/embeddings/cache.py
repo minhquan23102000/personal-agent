@@ -1,5 +1,4 @@
 from typing import Optional, Dict, List
-import numpy as np
 from datetime import datetime, timedelta
 from loguru import logger
 

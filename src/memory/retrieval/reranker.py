@@ -1,7 +1,6 @@
 from typing import List, Tuple, TypeVar, Generic, Callable, Optional
 from dataclasses import dataclass
 from rerankers import Reranker, Document
-import numpy as np
 from loguru import logger
 from src.config import JINA_API_KEY
 
@@ -19,7 +18,7 @@ class RerankerConfig:
     api_key: Optional[str] = JINA_API_KEY  # For API-based rerankers
     device: Optional[str] = None  # Device for model inference
     lang: str = "en"  # Language for multilingual models
-    verbose: int = 1  # Verbosity level
+    verbose: int = 0  # Verbosity level
     max_length: Optional[int] = None  # Maximum length of input text
 
 
@@ -96,7 +95,7 @@ class AdvancedReranker:
 
             # Get reranking results
             results = self.model.rank(query=query, docs=docs)
-            logger.debug(f"Reranking results: {results}")
+            # logger.debug(f"Reranking results: {results}")
 
             # Create mapping from doc_id back to original items
             id_to_item = {idx: item for idx, item in enumerate(items)}

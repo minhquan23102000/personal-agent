@@ -15,7 +15,6 @@ from src.memory.database.base import BaseDatabase
 from src.memory.embeddings.base import BaseEmbedding
 from src.memory.retrieval.reranker import AdvancedReranker, RerankerConfig
 from src.memory.database.sqlite import SQLiteDatabase
-from src.memory.embeddings.sentence_transformer import SentenceTransformerEmbedding
 from src.memory.memory_toolkit.static_flow.end_conversation import (
     reflection_conversation,
 )
@@ -143,7 +142,7 @@ class MemoryManager:
                 limit=limit,
                 threshold=threshold,
             )
-            return rs
+            return [result.item for result in rs]
         except Exception as e:
             logger.error(f"Error searching knowledge: {str(e)}")
             raise
@@ -181,7 +180,7 @@ class MemoryManager:
                 limit=limit,
                 threshold=threshold,
             )
-            return rs
+            return [result.item for result in rs]
         except Exception as e:
             logger.error(f"Error searching entities: {str(e)}")
             raise
@@ -277,6 +276,9 @@ class MemoryManager:
         Returns:
             List of reranked items
         """
+        if not items:
+            return []
+
         if not self.use_reranker:
             return [SearchResult(item=item, score=0.7) for item in items[:limit]]
 
@@ -307,25 +309,6 @@ class MemoryManager:
                 limit=self.max_search_knowledge_results,  # Get more for reranking
             )
 
-            if not knowledge_entries:
-                return [], []
-
-            # Get related entities
-            all_entities = {
-                entity for entry in knowledge_entries for entity in entry.entities
-            }
-
-            all_entities_text = ", ".join(all_entities)
-            all_entities_embedding = await self.embedding_model.get_text_embedding(
-                all_entities_text
-            )
-
-            # First stage: Similarity search for entity relationships in a single query
-            entity_relationships = await self.db.search_similar_entities(
-                query_embedding=all_entities_embedding,
-                limit=self.max_search_entity_results,
-            )
-
             # Second stage: Rerank both result sets
             reranked_knowledge = await self._rerank_results(
                 query=query,
@@ -333,6 +316,28 @@ class MemoryManager:
                 text_extractor=lambda x: x.text,
                 limit=self.max_search_knowledge_results,
                 threshold=threshold,
+            )
+
+            if not reranked_knowledge:
+                return [], []
+
+            # Third stage: Get related entities
+            all_entities = {
+                entity for entry in knowledge_entries for entity in entry.entities
+            }
+
+            if not all_entities:
+                return reranked_knowledge, []
+
+            all_entities_text = ", ".join(all_entities)
+            all_entities_embedding = await self.embedding_model.get_text_embedding(
+                all_entities_text
+            )
+
+            #  Similarity search for entity relationships in a single query
+            entity_relationships = await self.db.search_similar_entities(
+                query_embedding=all_entities_embedding,
+                limit=self.max_search_entity_results,
             )
 
             reranked_relationships = await self._rerank_results(
@@ -364,22 +369,6 @@ class MemoryManager:
                 limit=self.max_search_entity_results,
             )
 
-            if not entity_relationships:
-                return [], []
-
-            # Get related knowledge based on entity relationships
-            entities_text = ", ".join(r.relationship_text for r in entity_relationships)
-            entities_embedding = await self.embedding_model.get_text_embedding(
-                entities_text
-            )
-
-            # First stage: Similarity search for related knowledge
-            related_knowledge = await self.db.search_similar_knowledge(
-                query_embedding=entities_embedding,
-                vector_column="entity_embeddings",  # Added missing comma
-                limit=self.max_search_knowledge_results,
-            )
-
             # Second stage: Rerank both results
             reranked_relationships = await self._rerank_results(
                 query=query,
@@ -387,6 +376,22 @@ class MemoryManager:
                 text_extractor=lambda x: x.relationship_text,
                 limit=self.max_search_entity_results,
                 threshold=threshold,
+            )
+
+            if not reranked_relationships:
+                return [], []
+
+            # Third stage: Get related knowledge based on entity relationships
+            entities_text = ", ".join(r.relationship_text for r in entity_relationships)
+            entities_embedding = await self.embedding_model.get_text_embedding(
+                entities_text
+            )
+
+            # Similarity search for related knowledge
+            related_knowledge = await self.db.search_similar_knowledge(
+                query_embedding=entities_embedding,
+                vector_column="entity_embeddings",  # Added missing comma
+                limit=self.max_search_knowledge_results,
             )
 
             reranked_knowledge = await self._rerank_results(
@@ -442,7 +447,7 @@ class MemoryManager:
         query: str,
         limit: int = 3,
         threshold: float | None = None,
-    ) -> List[ShortTermMemory]:
+    ) -> List[SearchResult[ShortTermMemory]]:
         """Search for similar short-term memories based on query text"""
         try:
             # Get query embedding
@@ -463,6 +468,10 @@ class MemoryManager:
                     limit=limit,
                     threshold=threshold,
                 )
+            else:
+                memories = [
+                    SearchResult(item=item, score=0.5) for item in memories[:limit]
+                ]
 
             return memories
 

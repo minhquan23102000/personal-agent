@@ -2,9 +2,6 @@ import inspect
 from mirascope.core import prompt_template, litellm, Messages
 from pydantic import BaseModel, Field
 from typing import TYPE_CHECKING
-from src.memory.memory_toolkit.static_flow.conversation_summary import (
-    BaseConversationSummary,
-)
 from tenacity import retry, stop_after_attempt, wait_exponential
 from mirascope.retries.tenacity import collect_errors
 from pydantic import AfterValidator, ValidationError
@@ -21,10 +18,7 @@ class BaseShortTermMemoryUpdate(BaseModel):
     """Model for short-term memory updates."""
 
     user_info: str = Field(
-        description="Identify any new details about the user's preferences, personality, background, needs, styles, habits, beliefs, your relationship with user or anything you understand about user."
-    )
-    recent_goal_and_status: str = Field(
-        description="Document the all the goals the user has set and their progress or status. Should be a list of bullet points in short and concise. If goal is completed, remove it from the list."
+        description="Any new details regarding the user's preferences, personality, background, needs, styles, habits, beliefs, your relationship with the user, how you addressed the user, or any other relevant information you have about the user."
     )
     important_context: str = Field(
         description="Capture any significant contextual elements that should be retained for future reference. Should be compressed and short as much as possible. Should be a list of bullet points in short and concise."
@@ -33,10 +27,13 @@ class BaseShortTermMemoryUpdate(BaseModel):
         description="Adjust the your belife and understanding of the world based on insights gained from the conversation. Should be a list of bullet points."
     )
     agent_info: str = Field(
-        description="How the conversation has changed you? Describe detailed of your personality, role, name, gender, language, style, age, profile, historical background, relationship with user and anything beyond."
+        description="How the conversation has changed you? Note and update your personality, role, name, gender, language, style, age, profile, historical background, anything beyond."
+    )
+    recent_goal_and_status: str = Field(
+        description="Document the all the goals the user has set and their progress or status. Should be a list of bullet points in short and concise. If goal is completed, remove it from the list."
     )
     environment_info: str = Field(
-        description="Describe the environment (both digital environment or physical environment) you are in. Anything you can experience, observe, realize, understand, feel, etc. Objects, resources, people, time, space, etc. Only include what is most meaningful to you."
+        description="Describe the environment (both digital environment or physical environment) you are in. Anything you can experience, observe, realize, understand, feel, etc. Objects, resources, people, time, space, etc. Only note what is most meaningful and useful to you."
     )
 
 
@@ -48,10 +45,14 @@ class BaseShortTermMemoryUpdate(BaseModel):
     Extract and update your short-term memory based on conversation history. Think of what need to remember or update? And what need to forget or delete? Then write an updated short-term memory. Think of it is as writting a note for your future self. This is very important, as it updated your future behavior, personality, and decision making. So be very careful and thoughtful.
     
     USER FEEDBACK:
+    <>
     {user_feedback}
+    </>
     
     Updated to your current short-term memory:
+    <>
     {current_memory}
+    </>
     """
 )
 def short_term_memory_prompt(history, current_memory, user_feedback): ...
