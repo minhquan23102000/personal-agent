@@ -6,7 +6,7 @@ from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_exponential
 from mirascope.retries.tenacity import collect_errors
 from pydantic import ValidationError
-from src.agent.error_prompt import format_error_message
+from src.core.prompt.error_prompt import format_error_message
 
 if TYPE_CHECKING:
     from src.agent.base_agent import BaseAgent
@@ -45,7 +45,8 @@ async def generate_conversation_summary(agent: "BaseAgent") -> BaseConversationS
     # )
 
     @retry(
-        stop=stop_after_attempt(3),
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
         after=collect_errors(ValidationError),
     )
     @litellm.call(
@@ -55,6 +56,7 @@ async def generate_conversation_summary(agent: "BaseAgent") -> BaseConversationS
     )
     def call(*, errors: list[ValidationError] | None = None):
         config = {}
+        agent.rotate_api_key()
 
         config["messages"] = prompt
 

@@ -16,13 +16,13 @@ from src.agent.base_agent import BaseAgent
 from src.memory import MemoryManager
 
 from src.config import GOOGLE_API_KEY_LIST
-from src.agent.tools.search import (
+from src.core.tools.search import (
     WikipediaSearchContentTool,
     WikipediaSearchRelatedArticleTool,
     DuckDuckGoSearchTool,
     WebReaderTool,
 )
-
+from src.core.reasoning.react import ReactEngine
 
 SYSTEM_PROMPT_PATH = Path(__file__).parent / "inital_system_prompt.md"
 
@@ -40,6 +40,9 @@ class Eva(BaseAgent):
 
     def __post_init__(self):
         self.memory_manager = MemoryManager(db_uri=self.agent_id)
+        self.reasoning_engine = ReactEngine(
+            max_retries=self.max_retries, model_name=self.slow_model_name
+        )
         super().__post_init__()
         self.add_tools(
             [

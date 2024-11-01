@@ -21,10 +21,13 @@ if TYPE_CHECKING:
 
 def format_summary(summary: BaseConversationSummary) -> str:
     return inspect.cleandoc(
-        f"""
-Summary: {summary.summary}.
-Key Points: {"\n -".join(summary.key_points)}
-Outcomes: {"\n -".join(summary.outcomes)}
+        f"""    
+Summary: 
+{summary.summary}
+Key Points: 
+{"\n- ".join(summary.key_points)}
+Outcomes: 
+{"\n- ".join(summary.outcomes)}
 """
     )
 

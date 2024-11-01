@@ -39,7 +39,7 @@ class DynamicMemoryToolKit(BaseToolKit):
             self: self.
             knowledge_text (List[str]): A list of knowledge strings to be stored. Each knowledge should be clear separated from each other, unless they have the same context. Do not join multiple unrelated knowledge into one sentence.
             entities (List[str]): A list of entities related to the knowledge.
-            entities_relationship (List[str]): A list of concise and very short relationship descriptions between the entities, formatted as "entity1" "relationship" "entity2". Focus on the relationship between the entities, not the facts or knowledges.
+            entities_relationship (List[str]): A list of concise and very short relationship between the entities, formatted as "entity1" "relationship" "entity2". Focus on the relationship between the entities, not the facts or knowledges.
         """
 
         try:
@@ -98,6 +98,8 @@ class DynamicMemoryToolKit(BaseToolKit):
         - When you need to find a specific fact
         - When you need to find related information
 
+        !!Do not use this when you have context in the current moment. Only use this when you need to recall something from the past.
+
         Args:
             query (str): The query string used to search for relevant knowledge.
         """
@@ -142,6 +144,9 @@ class DynamicMemoryToolKit(BaseToolKit):
         - When you need to find connections between entities
         - When you need to find relationships between entities
         - When you need to find information, knowledge, or facts about entities
+
+
+        !!Do not use this when you have context in the current moment. Only use this when you need to recall something from the past.
 
         Args:
             entities (List[str]): A list of entity names to search for relationships and knowledge.
@@ -201,7 +206,7 @@ class DynamicMemoryToolKit(BaseToolKit):
         Args:
             self: self.
             entities (List[str]): A list of entity names to store relationships for.
-            entities_relationships (List[str]): A list of concise and short relationship descriptions between the entities, formatted as "entity1" "relationship" "entity2".
+            entities_relationships (List[str]): A list of concise and short relationship between the entities, formatted as "entity1" "relationship" "entity2".
         """
         try:
             if not self.memory_manager:

@@ -38,7 +38,8 @@ class MemoryManager:
         db_uri: str,
         database: BaseDatabase | None = None,
         embedding_model: BaseEmbedding | None = None,
-        similarity_threshold: float = 0.5,
+        retrieval_similarity_threshold: float = 0.7,
+        reranker_similarity_threshold: float = 0.5,
         max_search_knowledge_results: int = 5,
         max_search_entity_results: int = 10,
         use_reranker: bool = True,
@@ -63,9 +64,9 @@ class MemoryManager:
             self.db = SQLiteDatabase(
                 db_uri=db_uri,
                 embedding_size=self.embedding_model.embedding_size,
-                similarity_threshold=similarity_threshold,
+                similarity_threshold=retrieval_similarity_threshold,
             )
-        self.similarity_threshold = similarity_threshold
+        self.reranker_similarity_threshold = reranker_similarity_threshold
         self.max_search_knowledge_results = max_search_knowledge_results
         self.max_search_entity_results = max_search_entity_results
         self.use_reranker = use_reranker
@@ -289,7 +290,7 @@ class MemoryManager:
             items=items,  # Initial scores don't matter for reranking
             text_extractor=text_extractor,
             top_k=limit,
-            threshold=threshold or self.similarity_threshold,
+            threshold=threshold or self.reranker_similarity_threshold,
         )
 
         return [SearchResult(item=item, score=score) for item, score in reranked_items]

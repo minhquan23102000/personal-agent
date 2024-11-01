@@ -11,7 +11,7 @@ from loguru import logger
 if TYPE_CHECKING:
     from src.agent.base_agent import BaseAgent
 
-from src.agent.error_prompt import format_error_message
+from src.core.prompt.error_prompt import format_error_message
 
 
 class BaseShortTermMemoryUpdate(BaseModel):
@@ -36,7 +36,7 @@ class BaseShortTermMemoryUpdate(BaseModel):
         description="Document the all the goals the user has set and their progress or status. Should be a list of bullet points in short and concise. If goal is completed, remove it from the list."
     )
     environment_info: str = Field(
-        description="Describe the environment surrounding. Anything you can experience, observe, realize, thought, hypothesis, understand, feel, etc. Objects, resources, people, time, space, etc. Only note what is most meaningful and useful to you."
+        description="Describe the environment surrounding. Anything you can experience, observe, realize, thought, hypothesis, understand, feel, etc. Objects, resources, tools, people, time, space, etc. Only note what is most meaningful and useful to you."
     )
 
 
@@ -68,12 +68,13 @@ async def generate_updated_short_term_memory(
     try:
         prompt = short_term_memory_prompt(
             history=agent._build_prompt(include_short_term_memory=False),
-            current_memory=agent.short_term_memory,
+            current_memory=agent.context_memory,
             user_feedback=user_feedback,
         )
 
         @retry(
-            stop=stop_after_attempt(3),
+            stop=stop_after_attempt(5),
+            wait=wait_exponential(multiplier=1, min=4, max=10),
             after=collect_errors(ValidationError),
         )
         @litellm.call(
@@ -83,6 +84,7 @@ async def generate_updated_short_term_memory(
         )
         def call(*, errors: list[ValidationError] | None = None):
             config = {}
+            agent.rotate_api_key()
 
             config["messages"] = prompt
 

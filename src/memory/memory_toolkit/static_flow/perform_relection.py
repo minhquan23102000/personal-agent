@@ -21,7 +21,7 @@ from tenacity import retry, stop_after_attempt
 if TYPE_CHECKING:
     from src.agent.base_agent import BaseAgent
 
-from src.agent.error_prompt import format_error_message
+from src.core.prompt.error_prompt import format_error_message
 
 
 class BaseSelfReflection(BaseModel):
@@ -78,7 +78,8 @@ async def perform_self_reflection(
         user_feedback = user_feedback or "No user feedback provided."
 
         @retry(
-            stop=stop_after_attempt(3),
+            stop=stop_after_attempt(5),
+            wait=wait_exponential(multiplier=1, min=4, max=10),
             after=collect_errors(ValidationError),
         )
         @litellm.call(
@@ -88,6 +89,7 @@ async def perform_self_reflection(
         )
         def call(*, errors: list[ValidationError] | None = None):
             config = {}
+            agent.rotate_api_key()
 
             config["messages"] = base_self_reflection_prompt(
                 system_prompt=agent.system_prompt,
