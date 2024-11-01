@@ -25,7 +25,7 @@ from src.config import DATA_DIR
 class SQLiteDatabase(BaseDatabase):
     db_uri: str
     embedding_size: int
-    connection_config: dict = field(init=False)
+    similarity_threshold: float = 0.5
 
     def __post_init__(self):
         # Clean up db_uri
@@ -36,29 +36,12 @@ class SQLiteDatabase(BaseDatabase):
         if not self.db_uri.endswith(".db"):
             self.db_uri = f"{DATA_DIR}/{self.db_uri}.db"
 
-        # Set connection config
-        self.connection_config = {
-            "db_uri": self.db_uri,
-            "embedding_size": self.embedding_size,
-        }
-
         super().__post_init__()
-
-    def _validate_config(self) -> None:
-        """Validate the connection configuration"""
-        if not isinstance(self.connection_config["db_uri"], str):
-            raise ValueError("db_uri must be a string")
-
-        if (
-            not isinstance(self.connection_config["embedding_size"], int)
-            or self.connection_config["embedding_size"] <= 0
-        ):
-            raise ValueError("embedding_size must be a positive integer")
 
     def _setup_connection(self) -> None:
         """Initialize SQLite and load vector extension"""
         try:
-            db_uri = self.connection_config["db_uri"]
+            db_uri = self.db_uri
             Path(db_uri).parent.mkdir(parents=True, exist_ok=True)
 
             with sqlite3.connect(db_uri) as conn:
@@ -76,7 +59,7 @@ class SQLiteDatabase(BaseDatabase):
 
     @asynccontextmanager
     async def get_connection(self) -> AsyncGenerator[sqlite3.Connection, None]:
-        conn = sqlite3.connect(self.connection_config["db_uri"])
+        conn = sqlite3.connect(self.db_uri)
         try:
             conn.enable_load_extension(True)
             sqlite_vec.load(conn)
@@ -111,7 +94,7 @@ class SQLiteDatabase(BaseDatabase):
             f"""
             CREATE VIRTUAL TABLE IF NOT EXISTS short_term_memory_vec USING vec0(
                 id integer primary key,
-                summary_embedding float[{self.connection_config['embedding_size']}]
+                summary_embedding float[{self.embedding_size}]
             )
             """
         )
@@ -148,8 +131,8 @@ class SQLiteDatabase(BaseDatabase):
             f"""
             CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_vec USING vec0(
                 knowledge_id integer primary key,
-                text_embedding float[{self.connection_config['embedding_size']}],
-                entity_embeddings float[{self.connection_config['embedding_size']}]
+                text_embedding float[{self.embedding_size}],
+                entity_embeddings float[{self.embedding_size}]
             )
             """
         )
@@ -169,7 +152,7 @@ class SQLiteDatabase(BaseDatabase):
             f"""
             CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec USING vec0(
                 relationship_id integer primary key,
-                embedding float[{self.connection_config['embedding_size']}]
+                embedding float[{self.embedding_size}]
             )
             """
         )
@@ -274,7 +257,7 @@ class SQLiteDatabase(BaseDatabase):
                     (
                         json.dumps(entity_embeddings)
                         if entity_embeddings is not None
-                        else json.dumps([0] * self.connection_config["embedding_size"])
+                        else json.dumps([0] * self.embedding_size)
                     ),
                 ),
             )
@@ -772,6 +755,7 @@ class SQLiteDatabase(BaseDatabase):
                     agent_info=row[7],
                     environment_info=row[8],
                     timestamp=datetime.fromisoformat(row[9]),
+                    how_to_address_user=row[10],
                 )
                 for row in rows
             ]

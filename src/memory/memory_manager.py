@@ -61,9 +61,10 @@ class MemoryManager:
             self.db = database
         else:
             self.db = SQLiteDatabase(
-                embedding_size=self.embedding_model.embedding_size, db_uri=db_uri
+                db_uri=db_uri,
+                embedding_size=self.embedding_model.embedding_size,
+                similarity_threshold=similarity_threshold,
             )
-
         self.similarity_threshold = similarity_threshold
         self.max_search_knowledge_results = max_search_knowledge_results
         self.max_search_entity_results = max_search_entity_results

@@ -17,17 +17,9 @@ from src.memory.models import (
 class BaseDatabase(ABC):
     """Abstract base class for database implementations"""
 
-    connection_config: dict
-
     def __post_init__(self):
         """Initialize database with connection configuration"""
-        self._validate_config()
         self._setup_connection()
-
-    @abstractmethod
-    def _validate_config(self) -> None:
-        """Validate the connection configuration"""
-        pass
 
     @abstractmethod
     def _setup_connection(self) -> None:
