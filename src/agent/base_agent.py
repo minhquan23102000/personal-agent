@@ -240,36 +240,6 @@ class BaseAgent:
             description="Consider the tools you will utilize for the action you plan to take. Only include the tools if you believe they will be necessary for this specific action. Do not add them indiscriminately; instead, think critically and plan carefully before making your selection. DO NOT ADD MULTIPLE TOOLS IF YOU THINK YOU CAN USE ONE TOOL TO COMPLETE THE ACTION. If no tools are deemed necessary, simply leave that section empty."
         )
 
-        # @classmethod
-        # @pydantic.field_validator("tools", mode="after")
-        # def validate_tools(
-        #     cls, v: list[str], info: pydantic.ValidationInfo
-        # ) -> list[str]:
-        #     values = info.data
-        #     if (values.get("complete_task")) and v:
-        #         raise ValueError("Tools use should be empty if complete_task is True.")
-        #     return v
-
-        # @classmethod
-        # @pydantic.field_validator("send_message_to_user", mode="after")
-        # def validate_send_message_to_user(
-        #     cls, v: bool, info: pydantic.ValidationInfo
-        # ) -> bool:
-        #     values = info.data
-        #     if v and values.get("tools"):
-        #         raise ValueError(
-        #             "send_message_to_user should be False if tools is not empty. If there are still an action or tool use to take."
-        #         )
-        #     return v
-
-        # @classmethod
-        # @pydantic.field_validator("complete_task", mode="after")
-        # def validate_complete_task(cls, v: bool, info: pydantic.ValidationInfo) -> bool:
-        #     values = info.data
-        #     if v and values.get("tools"):
-        #         raise ValueError("Tools use should be empty if complete_task is True.")
-        #     return v
-
     @prompt_template(
         """
         MESSAGES: 
@@ -360,7 +330,7 @@ class BaseAgent:
 
     async def _process_tools(
         self, tools: List[OpenAITool], response: OpenAICallResponse
-    ) -> None:
+    ):
         """Process and execute tools called by the agent."""
         tools_and_outputs = []
         self.printer.print_system_message(
@@ -388,11 +358,12 @@ class BaseAgent:
 
         # Get tool messages and add them to history
         tool_messages = response.tool_message_params(tools_and_outputs)
-        self.history.extend(tool_messages)
 
         # Store tool interactions in memory if available
         if self.memory_manager:
             await self._store_tool_interactions(tool_messages)
+
+        return tool_messages
 
     def format_reasoning_response(self, response: ReasoningAction) -> str:
         """Format the reasoning response."""
@@ -402,8 +373,8 @@ class BaseAgent:
             My thought: {response.thought}
             Do I reach the final goal: {"Yes" if response.goal_completed else "No"}
             Should I talk to {self.short_term_memory.how_to_address_user if self.short_term_memory else "user"}: {"Yes" if response.talk_to_user else "No"}
-            Action I should take: {response.action}
-            Tools I should use: {response.tools}
+            My Action: {response.action}
+            Available tools for action: {response.tools}
             """
         )
 
@@ -415,7 +386,7 @@ class BaseAgent:
         stop=stop_after_attempt(max_retries),
         after=collect_errors(ValidationError),
     )
-    async def _execute_action_with_tool(
+    async def _action_step(
         self,
         action: str,
         tools: List[str],
@@ -424,73 +395,44 @@ class BaseAgent:
     ) -> None:
         """Execute the action with tools."""
 
-        if not errors:
-            action_query = Messages.User(f"Let's executing the actions: {action}.")
-            tool_action_response = await self._default_call()  # type: ignore
-        else:
-            action_query = Messages.User(
-                f"There are some error in the last step when you use tools: {tools}."
-                f" You pass the wrong parameters to the tools: <> {format_error_message(errors)} </>."
-                f" Correct these parameters and re-execute the action: {action}."
+        if errors:
+            correct_action_query = Messages.User(
+                inspect.cleandoc(
+                    f"""
+                !! This is an remind auto message !! 
+                There are some error in the last step when indicate that you pass the wrong parameters when use tool. 
+                Error: <> {format_error_message(errors)} </>."
+                Correct the parameters indicated in the error message and re-execute the action: {action} immediately without further discussion.
+                """
+                )
             )
             self.history.append(
-                action_query
+                correct_action_query
             )  # append to history for agent learn from the mistaske.
-            self.printer.print_user_message(action_query)
+            self.printer.print_user_message(correct_action_query)
 
-            tool_action_response = await self._default_call()  # type: ignore
-
+        # call to execute the action
+        tool_action_response = await self._default_call()  # type: ignore
         await self._assitant_turn_message(tool_action_response.message_param)
         self.printer.print_agent_message(tool_action_response.content)
 
-        # keep loop if agent plan use tool, but action not use the tool.
-        # i = 0
-        # while not tool_action_response.tools:
-
-        #     action_query = Messages.User(
-        #         f"!!!AUTO MESSAGE REMIND YOU TO USE THE TOOLS: {tools} to perform the designated action: {action}"
-        #     )
-        #     self.printer.print_user_message(action_query)
-
-        #     tool_action_response = await self._default_call(action_query)  # type: ignore
-        #     await self._assitant_turn_message(tool_action_response.message_param)
-        #     self.printer.print_agent_message(tool_action_response.content)
-
-        #     time.sleep(1)
-
-        #     i += 1
-        #     if i > self.max_retries:
-        #         break
-
-        # if i > self.max_retries:
-        #     mistake_tools_user_response = f"You plan to use tools: {tools} to perform the action: {action}, but you didn't use the tools, even after {self.max_retries} reminders. Process next step if you think this is normal. Or talk with me if you need help."
-
-        #     self.history.append(Messages.User(mistake_tools_user_response))
-        #     self.printer.print_user_message(mistake_tools_user_response)
-        #     return
-
+        # agent response with tools call, process the tools call and return the output to history
         if tool_action_response.tools:
-            # agent response with tools call, process the tools call and return the output to history
-            await self._process_tools(tool_action_response.tools, tool_action_response)
+            tool_output_messages = await self._process_tools(
+                tool_action_response.tools, tool_action_response
+            )
+            self.history.extend(tool_output_messages)
 
     async def _react_loop(self) -> None:
         """React loop to reason and act."""
         # chain of thought reasoning action loop
-        talk_to_human = False
-        goal_completed = False
         num_iterate_without_tools = 0
-        while not talk_to_human and not goal_completed:
+        while True:
             # reasoning step
             reasoning_response = await self._reasoning_action()  # type: ignore
-
-            # condition to stop the chain of thought
-            talk_to_human = reasoning_response.talk_to_user
-            goal_completed = reasoning_response.goal_completed
-
             formatted_reasoning_response = self.format_reasoning_response(
                 reasoning_response
             )
-
             await self._assitant_turn_message(
                 Messages.Assistant(formatted_reasoning_response)
             )
@@ -498,28 +440,41 @@ class BaseAgent:
             # print the reasoning response
             self.printer.print_agent_message(formatted_reasoning_response)
 
-            if talk_to_human:
+            # if agent decide to talk to user, break the chain of thought
+            if reasoning_response.talk_to_user:
                 break
 
             # if there are tools to execute, execute the action with tools, else continue the react chain of thought
-            if reasoning_response.tools:
-                await self._execute_action_with_tool(
-                    reasoning_response.action, reasoning_response.tools
-                )
-                num_iterate_without_tools = 0
-            else:
-                # self.printer.print_user_message(action_query)
-                action_without_tools = await self._default_call(include_tools=False)  # type: ignore
-                await self._assitant_turn_message(action_without_tools.message_param)
-                self.printer.print_agent_message(action_without_tools.content)
+            # if reasoning_response.tools:
+            #     await self._action_step(
+            #         reasoning_response.action, reasoning_response.tools
+            #     )
+            #     num_iterate_without_tools = 0
+            # else:
+            #     # self.printer.print_user_message(action_query)
+            #     action_without_tools = await self._default_call(include_tools=False)  # type: ignore
+            #     await self._assitant_turn_message(action_without_tools.message_param)
+            #     self.printer.print_agent_message(action_without_tools.content)
 
+            #     num_iterate_without_tools += 1
+
+            # agent execute the action
+            await self._action_step(reasoning_response.action, reasoning_response.tools)
+
+            # if agent decide to complete the task, break the chain of thought
+            if reasoning_response.goal_completed:
+                break
+
+            # agent plan and think not action, count the times
+            if not reasoning_response.tools:
                 num_iterate_without_tools += 1
+            else:
+                num_iterate_without_tools = 0
 
             if (
                 num_iterate_without_tools > self.max_thought_without_tools
             ):  # stop after 5 times of thought without doing any action
-                talk_to_human = True
-                # self.history.append(Messages.User(f""))
+                break
 
             time.sleep(2)
 
@@ -570,7 +525,7 @@ class BaseAgent:
                     break
 
                 query = Messages.User(query)
-                self.printer.print_user_message(query)
+                self.printer.print_user_message(query.content)
 
                 response = await self.step(query)
                 self.printer.print_agent_message(response)

@@ -13,12 +13,9 @@ class ConsolePrinter:
     console: Console = field(default_factory=Console)
 
     def print_box(self, message: Any, title=None, style="bold blue"):
-        with self.console.capture() as capture:
-            self.console.print(message)
-        str_output = capture.get()
-        text = Text.from_markup(str_output)
-        panel = Panel(text, title=title, padding=2, border_style=style)
-        self.console.print(panel)
+        self.console.print(f"[{title}]: ", style=style, justify="left")
+        self.console.print(message, style=style, justify="left")
+        self.console.line()
 
     def print_user_message(self, message: Any) -> None:
         # self.console.print("[User]", style="bold blue", justify="left")

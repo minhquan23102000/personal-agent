@@ -39,7 +39,7 @@ class DynamicMemoryToolKit(BaseToolKit):
             self: self.
             knowledge_text (List[str]): A list of knowledge strings to be stored. Each knowledge should be clear separated from each other, unless they have the same context. Do not join multiple unrelated knowledge into one sentence.
             entities (List[str]): A list of entities related to the knowledge.
-            entities_relationship (List[str]): A list of concise relationship descriptions between the entities, formatted as "entity1" "relationship" "entity2".
+            entities_relationship (List[str]): A list of concise and very short relationship descriptions between the entities, formatted as "entity1" "relationship" "entity2". Focus on the relationship between the entities, not the facts or knowledges.
         """
 
         try:

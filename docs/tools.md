@@ -87,37 +87,10 @@ except ValidationError as e:
 
 In this example we've added additional validation, but it's important that you still handle ValidationError's even with standard tools since they are still BaseModel instances and will validate the field types regardless.
 
-## Fewshot Examples
-```python
-from mirascope.core import BaseTool, litellm, prompt_template
-from pydantic import ConfigDict, Field
-
-
-class GetBookAuthor(BaseTool):
-    """Returns the author of the book with the given title."""
-
-    title: str = Field(
-        ...,
-        description="The title of the book.",
-        examples=["The Name of the Wind"],
-    )
-
-    model_config = ConfigDict(
-        json_schema_extra={"examples": [{"title": "The Name of the Wind"}]}
-    ) ### REMEMBER TO ADD THIS WHEN YOU ADD EXAMPLES IMPORTANTLY NOTE !!!!!
-
-    def call(self) -> str:
-        if self.title == "The Name of the Wind":
-            return "Patrick Rothfuss"
-        elif self.title == "Mistborn: The Final Empire":
-            return "Brandon Sanderson"
-        else:
-            return "Unknown"
-```
 
 ## Toolkits
 
-Toolkits are collections of tools that can be used to group related tools together. They are useful for organizing tools into logical groups, making it easier to manage and reuse them in different parts of your application.
+Toolkits are collections of tools that can be used to group related tools together. They are useful for organizing tools into logical groups, making it easier to manage and reuse them in different parts of the application.
 
 The BaseToolKit class enables:
 
@@ -169,3 +142,8 @@ if tool := response.tool:
 ## Documentation Guidelines
 
 When documenting tools, it's important to provide clear and concise descriptions that help the LLM understand how and when to use the tool. Think about the use case of the tool and how it can be used to solve a problem. Include many examples to help the LLM understand how to use the tool. Include scenarios to help the LLM understand how the tool can be used in real-world when they are on action.
+
+
+## Simplexity
+
+Tools should be designed for simplicity. Each tool should focus on a single task and perform it effectively. Avoid unnecessary complexity; instead, ensure that the agent can easily understand how to use the tool without confusion or ambiguity.

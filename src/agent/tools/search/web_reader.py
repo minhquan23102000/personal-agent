@@ -22,16 +22,11 @@ class WebReaderTool(BaseTool):
         urls: ["https://example.com", "https://example.org"]
     """
 
-    urls: Annotated[List[str], AfterValidator(validate_urls_count)] = Field(
+    urls: List[str] = Field(
         ...,
         description="List of URLs to read content from. Minimum is 1 URL, Maximum is 5 URLs.",
-        examples=[["https://example.com", "https://example.org"]],
-    )
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [{"urls": ["https://example.com", "https://example.org"]}]
-        }
+        max_length=7,
+        min_length=1,
     )
 
     def __clean_text(self, text: str) -> str:
