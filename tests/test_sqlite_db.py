@@ -22,7 +22,7 @@ DB_URI = "test_memory"
 @pytest.fixture()
 def db():
 
-    return SQLiteDatabase(db_uri=f"{DB_URI}_{uuid.uuid4}", embedding_size=364)
+    return SQLiteDatabase(db_uri=f"{DB_URI}_{uuid.uuid4()}", embedding_size=364)
 
 
 @pytest.fixture(autouse=True)
@@ -219,6 +219,7 @@ async def test_store_and_get_short_term_memory(db):
         agent_beliefs="User is interested in AI",
         agent_info="AI assistant",
         environment_info="Chat environment",
+        how_to_address_user="Test how to address user",
         summary_embedding=[0.1] * 364,
     )
 
@@ -254,6 +255,7 @@ async def test_search_similar_short_term_memories(db):
             "agent_beliefs": f"Beliefs {i}",
             "agent_info": f"Agent info {i}",
             "environment_info": f"Environment {i}",
+            "how_to_address_user": f"How to address user",
             "summary_embedding": [0.1 * i] * 364,
         }
         for i in range(5)
@@ -290,6 +292,7 @@ async def test_get_short_term_memory_by_conversation(db):
             agent_beliefs="Test beliefs",
             agent_info="Test agent info",
             environment_info="Test environment",
+            how_to_address_user="Test how to address user",
             summary_embedding=[0.1] * 364,
         )
 
@@ -326,6 +329,7 @@ async def test_short_term_memory_vector_search_ordering(db):
             agent_beliefs="Test beliefs",
             agent_info="Test agent info",
             environment_info="Test environment",
+            how_to_address_user="Test how to address user",
             summary_embedding=embedding,
         )
 

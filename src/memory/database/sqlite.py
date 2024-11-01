@@ -36,6 +36,9 @@ class SQLiteDatabase(BaseDatabase):
         if not self.db_uri.endswith(".db"):
             self.db_uri = f"{DATA_DIR}/{self.db_uri}.db"
 
+        # reverse similarity threshold
+        self.similarity_threshold = 1 - self.similarity_threshold
+
         super().__post_init__()
 
     def _setup_connection(self) -> None:
@@ -349,7 +352,7 @@ class SQLiteDatabase(BaseDatabase):
         ] = "text_embedding",
         limit: int = 5,
     ) -> List[Knowledge]:
-        """Search for similar knowledge using vector similarity"""
+        """Search for similar knowledge using cosine similarity"""
         async with self.get_connection() as conn:
             query_json = json.dumps(query_embedding)
 
@@ -359,9 +362,10 @@ class SQLiteDatabase(BaseDatabase):
                     SELECT 
                         knowledge_id,
                         {vector_column} as embedding,
-                        distance
+                        vec_distance_cosine({vector_column}, ?) as distance
                     FROM knowledge_vec
-                    WHERE {vector_column} MATCH ?
+                    WHERE vec_distance_cosine({vector_column}, ?) <= ?
+                    ORDER BY distance
                     LIMIT ?
                 )
                 SELECT 
@@ -372,7 +376,7 @@ class SQLiteDatabase(BaseDatabase):
                 JOIN vector_matches vm ON k.knowledge_id = vm.knowledge_id
                 ORDER BY vm.distance
                 """,
-                (query_json, limit),
+                (query_json, query_json, self.similarity_threshold, limit),
             )
 
             rows = cursor.fetchall()
@@ -388,7 +392,7 @@ class SQLiteDatabase(BaseDatabase):
     async def search_similar_entities(
         self, query_embedding: List[float], limit: int = 5
     ) -> List[EntityRelationship]:
-        """Search for similar entities using vector similarity"""
+        """Search for similar entities using cosine similarity"""
         async with self.get_connection() as conn:
             query_json = json.dumps(query_embedding)
 
@@ -398,9 +402,10 @@ class SQLiteDatabase(BaseDatabase):
                     SELECT 
                         relationship_id,
                         embedding,
-                        distance
+                        vec_distance_cosine(embedding, ?) as distance
                     FROM entities_vec
-                    WHERE embedding MATCH ?
+                    WHERE vec_distance_cosine(embedding, ?) <= ?
+                    ORDER BY distance
                     LIMIT ?
                 )
                 SELECT 
@@ -411,7 +416,7 @@ class SQLiteDatabase(BaseDatabase):
                 JOIN vector_matches vm ON e.relationship_id = vm.relationship_id
                 ORDER BY vm.distance
                 """,
-                (query_json, limit),
+                (query_json, query_json, self.similarity_threshold, limit),
             )
 
             rows = cursor.fetchall()
@@ -683,7 +688,7 @@ class SQLiteDatabase(BaseDatabase):
                 agent_info=row[6],
                 environment_info=row[7],
                 how_to_address_user=row[8],
-                timestamp=datetime.fromisoformat(row[9]),
+                timestamp=row[9],
             )
 
     async def get_latest_conversation_summary(self) -> Optional[ConversationSummary]:
@@ -718,7 +723,7 @@ class SQLiteDatabase(BaseDatabase):
         query_embedding: List[float],
         limit: int = 5,
     ) -> List[ShortTermMemory]:
-        """Search for similar short-term memories using vector similarity"""
+        """Search for similar short-term memories using cosine similarity"""
         async with self.get_connection() as conn:
             query_json = json.dumps(query_embedding)
 
@@ -728,9 +733,10 @@ class SQLiteDatabase(BaseDatabase):
                     SELECT 
                         id,
                         summary_embedding,
-                        distance
+                        vec_distance_cosine(summary_embedding, ?) as distance
                     FROM short_term_memory_vec
-                    WHERE summary_embedding MATCH ?
+                    WHERE vec_distance_cosine(summary_embedding, ?) <= ?
+                    ORDER BY distance
                     LIMIT ?
                 )
                 SELECT 
@@ -740,7 +746,7 @@ class SQLiteDatabase(BaseDatabase):
                 JOIN vector_matches vm ON s.id = vm.id
                 ORDER BY vm.distance
                 """,
-                (query_json, limit),
+                (query_json, query_json, self.similarity_threshold, limit),
             )
 
             rows = cursor.fetchall()
@@ -754,8 +760,8 @@ class SQLiteDatabase(BaseDatabase):
                     agent_beliefs=row[6],
                     agent_info=row[7],
                     environment_info=row[8],
-                    timestamp=datetime.fromisoformat(row[9]),
-                    how_to_address_user=row[10],
+                    timestamp=row[10],
+                    how_to_address_user=row[9],
                 )
                 for row in rows
             ]
