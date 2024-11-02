@@ -14,6 +14,7 @@ from mirascope.retries.tenacity import collect_errors
 from pydantic import ValidationError
 
 from src.core.prompt.error_prompt import format_error_message
+from src.core.prompt.tool_prompt import get_list_tools_name
 
 if TYPE_CHECKING:
     from src.agent.base_agent import BaseAgent
@@ -78,10 +79,13 @@ class ReactEngine:
         {messages}
         
         USER:
-        Reflect on the previous message or output, noting thoughts and feelings regarding the current situation and observations. Subsequently, determine the appropriate actions to take. This is your internal thought, not for user, so write it as if you are taking note for yourself, so the note should be concise and clear as possible.
+        Available tools names:
+        {tools:list}
+        
+        Reflect on the previous message or output, noting thoughts and feelings regarding the current situation and observations. Subsequently, determine the appropriate actions to take. This is your internal thought, not for user, so write it as if you are taking note for yourself, ensure the note content are concise and clear as possible.
         """
     )
-    def _prompt_template(self, messages: list[BaseMessageParam]): ...
+    def _prompt_template(self, messages: list[BaseMessageParam], tools: list): ...
 
     @retry(
         stop=stop_after_attempt(max_retries),
@@ -96,9 +100,10 @@ class ReactEngine:
     async def _reasoning_step(
         self,
         messages: list[BaseMessageParam],
+        tools: list,
     ):
         """Reasoning about the action to take."""
-        prompt = self._prompt_template(messages)
+        prompt = self._prompt_template(messages, tools)
         return prompt
 
     async def _action_step(
@@ -126,7 +131,9 @@ class ReactEngine:
         i = 0
         while i < self.max_thought_deep:
             # reasoning step
-            reasoning_response = await self._reasoning_step(agent._build_prompt())  # type: ignore
+            reasoning_response = await self._reasoning_step(
+                agent._build_prompt(), get_list_tools_name(agent.get_tools())
+            )  # type: ignore
             reasoning_message = self.format_reasoning_response(
                 agent, reasoning_response
             )
