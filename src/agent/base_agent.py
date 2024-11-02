@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 import hashlib
+import inspect
 import uuid
 from typing import Any, Callable, List, Optional, Type, Union
 import traceback
@@ -35,6 +36,7 @@ from src.core.prompt.tool_prompt import (
 from src.interface import ConsoleInterface, BaseInterface
 
 from src.core.reasoning.base import BaseReasoningEngine
+from src.memory.memory_toolkit.note_taking import NoteTakingToolkit, format_notes
 
 GEMINI_SAFETY_SETTINGS = [
     {
@@ -78,6 +80,7 @@ class BaseAgent:
     tools: List[Union[Type[BaseTool], Callable]] = field(default_factory=list)
 
     reasoning_engine: Optional[BaseReasoningEngine] = None
+    note_taking_toolkit: NoteTakingToolkit = field(default_factory=NoteTakingToolkit)
 
     api_keys: list[str] | None = None
     rotating_api_keys: RotatingList | None = None
@@ -128,17 +131,18 @@ class BaseAgent:
             self.add_tools(dynamic_toolkit.create_tools())
             self.memory_manager.set_agent(self)
 
-        tools_sequence: List[BaseTool | Callable] = self.get_tools()
-        self.interface.print_system_message(
-            f"Tools: {get_list_tools_name(tools_sequence)}"
-        )
+            self.add_tools(self.note_taking_toolkit.create_tools())
 
     def rotate_api_key(self) -> None:
         """Rotate the api key."""
         if self.rotating_api_keys:
             if self.api_key_env_var:
                 api_key = self.rotating_api_keys.rotate()
-                os.environ[self.api_key_env_var] = api_key
+                os.environ[self.api_key_env_var] = str(api_key)
+
+                self.interface.print_system_message(
+                    f"Current api key: {os.environ[self.api_key_env_var]}"
+                )
 
     def add_tools(self, tools: List[Union[Type[BaseTool], Callable]]) -> None:
         self.tools.extend(tools)
@@ -173,13 +177,18 @@ class BaseAgent:
     @prompt_template(
         """
         SYSTEM: 
+    
         {system_prompt}
+        
         {short_term_memory_prompt}
         
         # AVAILABLE TOOLS (REMEMBER TO USE THEM WHEN NECESSARY): 
-        <>
+        
         {tools_prompt}
-        </>
+        
+        # AGENT'S NOTES (IMPORTANT INFORMATION, KNOWLEDGES, IDEAS, PLANS, ETC. IN THE CURRENT CONTEXT):
+        
+        {notes_prompt}
         
         MESSAGES: {history}
         """
@@ -190,6 +199,7 @@ class BaseAgent:
         include_short_term_memory: bool = True,
         include_system_prompt: bool = True,
         include_tools_prompt: bool = True,
+        include_notes_prompt: bool = True,
     ) -> BaseDynamicConfig:
         """Build the prompt for the agent using the current state."""
         system_prompt = build_system_prompt(self) if include_system_prompt else ""
@@ -204,12 +214,17 @@ class BaseAgent:
             else ""
         )
 
+        notes_prompt = (
+            format_notes(self.note_taking_toolkit.notes) if include_notes_prompt else ""
+        )
+
         return {
             "computed_fields": {
                 "system_prompt": system_prompt,
                 "short_term_memory_prompt": short_term_memory_prompt,
                 "history": history,
                 "tools_prompt": tools_prompt,
+                "notes_prompt": notes_prompt,
             }
         }
 
@@ -277,26 +292,36 @@ class BaseAgent:
     )
     async def _default_step(
         self, *, errors: list[ValidationError] | None = None
-    ) -> None:
-        if errors is not None:
-            msg = f"There some errors in the last step related to pass wrong parameters to tools: {format_error_message(errors)}"
-            self.interface.print_system_message(
-                msg,
-                type="error",
+    ) -> tuple[bool, OpenAICallResponse]:
+        """Execute the default step of the agent. With current state and context history. Return True if the step agent use tool call."""
+        use_tool_call = False
+
+        if errors:
+            correct_action_query = Messages.User(
+                inspect.cleandoc(
+                    f"""
+                !! This is an remind auto message !! 
+                There are some error in the last step when indicate that you pass the wrong parameters when use tool. 
+                Error: <> {format_error_message(errors)} </>."
+                Correct the parameters indicated in the error message and re-execute the action immediately without further discussion.
+                """
+                )
             )
+            self.history.append(correct_action_query)
+            self.interface.print_user_message(correct_action_query)
 
-            error_message = Messages.User(msg)
-            self.history.append(error_message)
-            await self.store_turn_message(error_message, "user")
-
+        # response call
         response = await self._default_call()  # type: ignore
         await self._assitant_turn_message(response.message_param)
-
-        if response.tool_calls:
-            tool_messages = await self._process_tools(response.tool_calls, response)
-            self.history.extend(tool_messages)  # type: ignore
-
         self.interface.print_agent_message(response.content)
+
+        # tool call
+        if response.tools:
+            tool_output_messages = await self._process_tools(response.tools, response)
+            self.history.extend(tool_output_messages)  # type: ignore
+            use_tool_call = True
+
+        return use_tool_call, response
 
     async def step(
         self,
@@ -304,14 +329,17 @@ class BaseAgent:
     ):
         """Execute one step of the agent's reasoning process."""
         try:
-            await self.store_turn_message(query, "user")
-            self.history.append(query)
+            if query:
+                await self.store_turn_message(query, "user")
+                self.history.append(query)
 
             # reasoning loop
             if self.reasoning_engine:
                 await self.reasoning_engine.run(self)
             else:
-                await self._default_step()
+                use_tool_call, response = await self._default_step()
+                if use_tool_call:
+                    return self.step("")
 
         except Exception as e:
             self.interface.print_system_message(
@@ -341,6 +369,11 @@ class BaseAgent:
 
                 query = Messages.User(query)
                 await self.step(query)
+
+                # print agent notes
+                self.interface.print_system_message(
+                    f"Agent's notes:\n{format_notes(self.note_taking_toolkit.notes)}"
+                )
 
         except Exception as e:
             self.interface.print_system_message(

@@ -12,6 +12,7 @@ from src.memory.memory_toolkit.static_flow.perform_relection import (
     BaseSelfReflection,
     perform_self_reflection,
 )
+from src.memory.memory_toolkit.static_flow.save_long_term import save_long_term_memory
 from typing import TYPE_CHECKING
 from rich import print
 
@@ -46,6 +47,11 @@ async def reflection_conversation(
         summary_str = format_summary(summary_response)
         memory_manager.agent.rotate_api_key()
 
+        # 2. Save important information to long-term memory
+        await save_long_term_memory(memory_manager.agent)
+        memory_manager.agent.rotate_api_key()
+
+        # 3. Perform self reflection
         reflection_response = await perform_self_reflection(
             memory_manager.agent, user_feedback
         )
@@ -54,7 +60,7 @@ async def reflection_conversation(
         print(f"Summary: {summary_str}\n\n")
         print(f"Reflection: {reflection_response}\n\n")
 
-        # 2. Store conversation summary and improvements
+        # 4. Store reflection  and improvements
         await memory_manager.store_conversation_summary(
             conversation_id=memory_manager.agent.conversation_id,
             prompt=memory_manager.agent.system_prompt,
@@ -75,7 +81,7 @@ async def reflection_conversation(
             improvement_suggestion="\n".join(reflection_response.areas_for_improvement),
         )
 
-        # 3. Update short-term memory
+        # 5. Update short-term memory
         memory_updates = await generate_updated_short_term_memory(
             summary=summary_str,
             agent=memory_manager.agent,

@@ -32,8 +32,8 @@ class Delta3000(BaseAgent):
     """An agent that helps users find and recommend books."""
 
     system_prompt: str = SYSTEM_PROMPT_PATH.read_text()
-    default_model_name: str = "gemini-1.5-pro-002"
-    slow_model_name: str = "gemini-1.5-pro-002"
+    default_model_name: str = "gemini/gemini-1.5-flash-002"
+    slow_model_name: str = "gemini/gemini-1.5-pro-002"
     agent_id: str = "Delta 3000"
     api_key_env_var: str = "GEMINI_API_KEY"
     api_keys: list[str] = field(default_factory=lambda: GOOGLE_API_KEY_LIST)
@@ -42,8 +42,8 @@ class Delta3000(BaseAgent):
         self.memory_manager = MemoryManager(db_uri=self.agent_id)
         self.reasoning_engine = ReactEngine(
             max_retries=self.max_retries,
-            model_name=self.slow_model_name,
-            max_thought_deep=1,
+            model_name=self.default_model_name,
+            max_thought_deep=2,
         )
         super().__post_init__()
         self.add_tools(

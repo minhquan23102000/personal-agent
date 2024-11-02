@@ -147,3 +147,8 @@ When documenting tools, it's important to provide clear and concise descriptions
 ## Simplexity
 
 Tools should be designed for simplicity. Each tool should focus on a single task and perform it effectively. Avoid unnecessary complexity; instead, ensure that the agent can easily understand how to use the tool without confusion or ambiguity.
+
+
+## Error Handling
+
+Tools should be designed to handle errors gracefully. If a tool fails, return the error message back to the LLM so that the LLM can understand what went wrong and take appropriate action.

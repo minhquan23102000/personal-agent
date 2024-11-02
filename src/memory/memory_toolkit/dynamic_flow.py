@@ -14,91 +14,18 @@ class DynamicMemoryToolKit(BaseToolKit):
 
     memory_manager: MemoryManager
 
-    duplicate_threshold: float = 0.95
     similarity_threshold: float = 0.5
 
     @toolkit_tool
-    async def store_update_knowledge(
-        self,
-        knowledge_text: List[str],
-        entities: List[str],
-        entities_relationship: List[str],
-    ) -> str:
-        """Save important information, knowledge, facts to your long-term memory.
-
-        You can use this function in the following scenarios:
-        - When you learn something new
-        - When you have a realization
-        - When you have a new idea
-        - When you have a new feeling
-        - When you encounter important information
-
-        Ensure you include all informations, facts, knowledge you want to store in one call.
-
-        Args:
-            self: self.
-            knowledge_text (List[str]): A list of knowledge strings to be stored. Each knowledge should be clear separated from each other, unless they have the same context. Do not join multiple unrelated knowledge into one sentence.
-            entities (List[str]): A list of entities related to the knowledge.
-            entities_relationship (List[str]): A list of concise and very short relationship between the entities, formatted as "entity1" "relationship" "entity2". Focus on the relationship between the entities, not the facts or knowledges.
-        """
-
-        try:
-            if not self.memory_manager:
-                return "Error: Memory manager not available"
-
-            new_relationships = []
-            existing_relationships = []
-
-            return_msg = ""
-            if knowledge_text:
-
-                for knowledge in knowledge_text:
-                    similar_knowledge = (
-                        await self.memory_manager.search_similar_knowledge(
-                            query=knowledge, threshold=self.duplicate_threshold
-                        )
-                    )
-                    if similar_knowledge:
-                        continue
-                    else:
-                        await self.memory_manager.store_knowledge(
-                            text=knowledge,
-                            entities=entities,
-                            keywords=entities,
-                        )
-
-            if entities_relationship:
-                for rel_text in entities_relationship:
-                    similar_rel = await self.memory_manager.search_similar_entities(
-                        query=rel_text, threshold=self.duplicate_threshold
-                    )
-
-                if similar_rel:
-                    existing_relationships.append(similar_rel)
-                else:
-                    await self.memory_manager.store_entity_relationship(
-                        relationship_text=rel_text
-                    )
-                    new_relationships.append(rel_text)
-
-            return f"Successfully stored knowledge: {knowledge_text}, entities: {entities}, entites relationships: {entities_relationship} in Long Term Database."
-
-        except Exception as e:
-            logger.error(
-                f"Error storing knowledge: {e}. Traceback: {traceback.format_exc()}"
-            )
-            return f"Error storing knowledge: {str(e)}"
-
-    @toolkit_tool
     async def search_knowledge_facts(self, query: str) -> str:
-        """Search knowledge, facts from your long-term memory.
+        """Search knowledge, facts from your long-term memory in external long term memory database.
 
         You can use this function in the following scenarios:
         - When you need to recall important information
         - When you need to find a specific fact
-        - When you need to find related information
+        - When you need to find related knowledges
 
-        !!Do not use this when you have context in the current moment. Only use this when you need to recall something from the past.
+        Use this when you do not have context in the current moment for a specific topic user asking or for task you are working on.
 
         Args:
             query (str): The query string used to search for relevant knowledge.
@@ -138,7 +65,7 @@ class DynamicMemoryToolKit(BaseToolKit):
 
     @toolkit_tool
     async def search_entities_facts(self, entities: List[str]) -> str:
-        """Search knowledge, facts of entities or relationships between entities.
+        """Search knowledge, facts of entities or relationships between entities in external long term memory database.
 
         You can use this function in the following scenarios:
         - When you need to find connections between entities
@@ -146,7 +73,7 @@ class DynamicMemoryToolKit(BaseToolKit):
         - When you need to find information, knowledge, or facts about entities
 
 
-        !!Do not use this when you have context in the current moment. Only use this when you need to recall something from the past.
+        Use this when you do not have context in the current moment for a specific topic user asking or for task you are working on.
 
         Args:
             entities (List[str]): A list of entity names to search for relationships and knowledge.
@@ -186,51 +113,6 @@ class DynamicMemoryToolKit(BaseToolKit):
                 f"Error searching relationships: {e}. Traceback: {traceback.format_exc()}"
             )
             return f"Error searching relationships: {str(e)}. Traceback: {traceback.format_exc()}"
-
-    @toolkit_tool
-    async def store_update_entities_facts(
-        self,
-        entities: List[str],
-        entities_relationships: List[str],
-    ) -> str:
-        """Store relationships between entities in your long-term memory.
-
-        You can use this function in following scenarios:
-        - When you discover connections between entities
-        - When you learn how entities are related to each other
-        - When you want to explicitly store relationships without associated knowledge
-        - When you need to update or add new relationships between known entities
-
-        Ensure you include all entities and relationships you want to store in one call.
-
-        Args:
-            self: self.
-            entities (List[str]): A list of entity names to store relationships for.
-            entities_relationships (List[str]): A list of concise and short relationship between the entities, formatted as "entity1" "relationship" "entity2".
-        """
-        try:
-            if not self.memory_manager:
-                return "Error: Memory manager not available"
-
-            for rel_text in entities_relationships:
-                similar_rel = await self.memory_manager.search_similar_entities(
-                    query=rel_text, threshold=self.duplicate_threshold
-                )
-
-                if similar_rel:
-                    continue
-
-                await self.memory_manager.store_entity_relationship(
-                    relationship_text=rel_text
-                )
-
-            return f"Successfully stored entities relationships: {entities_relationships} in Long Term Database."
-
-        except Exception as e:
-            logger.error(
-                f"Error storing entity relationship: {e}. Traceback: {traceback.format_exc()}"
-            )
-            return f"Error storing entity relationship: {str(e)}. Traceback: {traceback.format_exc()}"
 
     @toolkit_tool
     async def recall_similar_conversation_contexts(self, query: str) -> str:
@@ -293,47 +175,6 @@ class DynamicMemoryToolKit(BaseToolKit):
                 f"Error searching conversation contexts: {e}. Traceback: {traceback.format_exc()}"
             )
             return f"Error searching conversation contexts: {str(e)}. Traceback: {traceback.format_exc()}"
-
-    # @toolkit_tool
-    # async def recall_conversation_by_id(self, conversation_id: str) -> str:
-    #     """Retrieve the specific conversation context using its ID.
-
-    #     You can use this function in following scenarios:
-    #     - When you need to recall the exact details of a specific conversation
-    #     - When you want to reference or continue a previous conversation
-    #     - When you need to verify or check specific details from a past interaction
-    #     - When you need to maintain continuity across conversation sessions
-
-    #     Provide the conversation_id to get the detailed context of that specific conversation.
-    #     """
-    #     try:
-    #         if not self.memory_manager:
-    #             return "Error: Memory manager not available"
-
-    #         memory = await self.memory_manager.get_short_term_memory(
-    #             conversation_id=conversation_id
-    #         )
-
-    #         if not memory:
-    #             return f"No conversation context found for ID: {conversation_id}"
-
-    #         context_details = [
-    #             f"Conversation Context for ID: {conversation_id}",
-    #             f"\nSummary: {memory.last_conversation_summary}",
-    #             f"Goal & Status: {memory.recent_goal_and_status}",
-    #             f"Important Context: {memory.important_context}",
-    #             f"User Info: {memory.user_info}",
-    #             f"Agent Beliefs: {memory.agent_beliefs}",
-    #             f"Agent Info: {memory.agent_info}",
-    #             f"Environment Info: {memory.environment_info}",
-    #             f"\nTimestamp: {memory.timestamp}",
-    #         ]
-
-    #         return "\n".join(context_details)
-
-    #     except Exception as e:
-    #         logger.error(f"Error retrieving conversation context: {e}")
-    #         return f"Error retrieving conversation context: {str(e)}"
 
 
 def get_memory_toolkit(memory_manager: "MemoryManager") -> DynamicMemoryToolKit:

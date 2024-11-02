@@ -35,13 +35,13 @@ class ReasoningAction(pydantic.BaseModel):
         description="True if you have got the answer for the user's question.",
     )
     talk_to_user: bool = pydantic.Field(
-        description="Do you need to talk to user in this action? True if you do.",
+        description="Talk to user in this action or the next action? True if you do.",
     )
     action: str = pydantic.Field(
         description="From thought and feeling, identify the most effective actions to take in this very moment, not the plan in future. It is possible to combine multiple actions, but be mindful that some may not be feasible or easy to execute simultaneously, unless you are confident. Include what tools you need to use to do the action if applicable."
     )
     talk_to_user_flag_2: bool = pydantic.Field(
-        description="Reconfirmation do you need to talk to user in this action? True if you do.",
+        description="Talk to user in this action or the next action? True if you do.",
     )
 
 
@@ -63,7 +63,7 @@ class ReactEngine:
 
         return inspect.cleandoc(
             f"""
-            # Agent's note:
+            # Agent's note (this is for agent's reference, not for user):
             * Feeling: {response.feeling}
             * Thought: {response.thought}
             * Do I reach the final goal or have the final answer: {"Yes" if response.goal_completed or response.got_final_answer else "No"}
@@ -101,44 +101,14 @@ class ReactEngine:
         prompt = self._prompt_template(messages)
         return prompt
 
-    @retry(
-        stop=stop_after_attempt(max_retries),
-        after=collect_errors(ValidationError),
-    )
     async def _action_step(
         self,
         agent: "BaseAgent",
         reasoning_response: ReasoningAction,
-        *,
-        errors: list[ValidationError] | None = None,
-    ) -> bool:
+    ) -> dict:
         """Execute the action."""
 
-        if errors:
-            correct_action_query = Messages.User(
-                inspect.cleandoc(
-                    f"""
-                !! This is an remind auto message !! 
-                There are some error in the last step when indicate that you pass the wrong parameters when use tool. 
-                Error: <> {format_error_message(errors)} </>."
-                Correct the parameters indicated in the error message and re-execute the action: {reasoning_response.action} immediately without further discussion.
-                """
-                )
-            )
-            agent.history.append(correct_action_query)
-            agent.interface.print_user_message(correct_action_query)
-
-        # action call
-        action_response = await agent._default_call()  # type: ignore
-        await agent._assitant_turn_message(action_response.message_param)
-        agent.interface.print_agent_message(action_response.content)
-
-        # tool call
-        if action_response.tools:
-            tool_output_messages = await agent._process_tools(
-                action_response.tools, action_response
-            )
-            agent.history.extend(tool_output_messages)  # type: ignore
+        use_tool_call, response = await agent._default_step()
 
         # condtion to break the loop
         if (
@@ -147,9 +117,9 @@ class ReactEngine:
             or reasoning_response.talk_to_user_flag_2
             or reasoning_response.got_final_answer
         ):
-            return True
+            return {"break": True, "response": response, "use_tool_call": use_tool_call}
 
-        return False
+        return {"break": False, "response": response, "use_tool_call": use_tool_call}
 
     async def run(self, agent: "BaseAgent"):
         """The main loop of the react engine."""
@@ -166,8 +136,13 @@ class ReactEngine:
             agent.history.append(agent_reasoning_message)
 
             # action step
-            action_break = await self._action_step(agent, reasoning_response)
+            action_result = await self._action_step(agent, reasoning_response)
 
-            if action_break:
+            if action_result["break"]:
                 break
             i += 1
+
+        # if agent use tool call, continue to step for agent handle tool output
+        use_tool_call = action_result["use_tool_call"]
+        while use_tool_call:
+            use_tool_call, response = await agent._default_step()

@@ -22,12 +22,11 @@ def parse_docstring_mirascope_tool(tool: BaseTool) -> dict:
     return {"tool_name": tool._name(), "tool_description": tool._description()}
 
 
-PROMPT_TOOL_TEMPLATE = """<Tool>
-<Name>{tool_name}</Name>
-<Description>
-{tool_description}
-</Description>
-</Tool>
+PROMPT_TOOL_TEMPLATE = """
+Tool: {tool_name}
+
+Description: 
+{tool_description}  
 """
 
 
@@ -58,4 +57,4 @@ def get_list_tools_name(tools: list[BaseTool | Callable]) -> list[str]:
 
 
 def build_prompt_from_list_tools(tools: list[BaseTool | Callable]) -> str:
-    return "\n".join([build_prompt_from_tool(tool) for tool in tools])
+    return "\n---\n".join([build_prompt_from_tool(tool) for tool in tools])
