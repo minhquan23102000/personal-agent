@@ -36,13 +36,13 @@ class ReasoningAction(pydantic.BaseModel):
         description="True if you have got the answer for the user's question.",
     )
     talk_to_user: bool = pydantic.Field(
-        description="Talk to user in this action or the next action? True if you do.",
+        description="Talk to user in this action? True if you do.",
     )
     action: str = pydantic.Field(
         description="From thought and feeling, identify the most effective actions to take in this very moment, not the plan in future. It is possible to combine multiple actions, but be mindful that some may not be feasible or easy to execute simultaneously, unless you are confident. Include what tools you need to use to do the action if applicable."
     )
     talk_to_user_flag_2: bool = pydantic.Field(
-        description="Talk to user in this action or the next action? True if you do.",
+        description="Talk to user in this action? True if you do.",
     )
 
 
@@ -52,7 +52,7 @@ class ReactEngine:
 
     model_name: str = "gemini/gemini-1.5-flash-002"
     max_retries: int = 3
-    max_thought_deep: int = 3
+    max_deep: int = 3
 
     def format_reasoning_response(
         self, agent: "BaseAgent", response: ReasoningAction
@@ -112,7 +112,10 @@ class ReactEngine:
         reasoning_response: ReasoningAction,
     ) -> dict:
         """Execute the action."""
-
+        query = Messages.Assistant(
+            f"Let's execute the action {reasoning_response.action}"
+        )
+        agent.history.append(query)
         use_tool_call, response = await agent._default_step()
 
         # condtion to break the loop
@@ -129,7 +132,7 @@ class ReactEngine:
     async def run(self, agent: "BaseAgent"):
         """The main loop of the react engine."""
         i = 0
-        while i < self.max_thought_deep:
+        while i < self.max_deep:
             # reasoning step
             reasoning_response = await self._reasoning_step(
                 agent._build_prompt(), get_list_tools_name(agent.get_tools())
@@ -152,4 +155,4 @@ class ReactEngine:
         # if agent use tool call, continue to step for agent handle tool output
         use_tool_call = action_result["use_tool_call"]
         while use_tool_call:
-            use_tool_call, response = await agent._default_step()
+            use_tool_call, response = await agent._default_step(include_tools=False)

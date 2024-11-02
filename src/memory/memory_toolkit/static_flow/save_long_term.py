@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from loguru import logger
 from src.core.prompt.error_prompt import format_error_message
 from typing import TYPE_CHECKING
+from src.memory.memory_toolkit.note_taking import format_notes
 
 if TYPE_CHECKING:
     from src.agent.base_agent import BaseAgent
@@ -19,7 +20,7 @@ class BaseLongTermMemory(BaseModel):
         description="List of important knowledge or facts extracted from the conversation"
     )
     entities: List[str] = Field(
-        description="List of important entities (people, concepts, objects) mentioned"
+        description="List of important entities (people, concepts, objects, etc.) mentioned"
     )
     entities_relationships: List[str] = Field(
         description="List of relationships between entities in format 'entity1 relationship entity2'"
@@ -30,15 +31,25 @@ class BaseLongTermMemory(BaseModel):
     """
     MESSAGES: {history}
     
-    USER:
+    USER
+    AGENT (YOUR) NOTES IN CURRENT CONVERSATION:
+    <>
+    {notes}
+    </>
+    
+    TASK:
+    
     Extract important knowledge, entities, and relationships from the conversation above that should be stored in long-term memory.
-    Focus on factual information, key insights, and meaningful relationships between concepts or entities.
+    Focus on factual information, knowledge, key insights, and meaningful relationships between concepts or entities.
     
     Format each knowledge item as a separate, clear statement.
-    Format relationships as concise "entity1 relationship entity2" statements.
+    Format relationships as short and concise "entity1 relationship entity2" statements.
+    Do not include temporary information or context that is not important for long-term memory.
+    
+    !! Important: Capture all essential information in this single interaction. Because you will only have one chance to store the information.
     """
 )
-def base_long_term_memory_prompt(history): ...
+def base_long_term_memory_prompt(history, notes): ...
 
 
 async def save_long_term_memory(agent: "BaseAgent") -> None:
@@ -47,15 +58,18 @@ async def save_long_term_memory(agent: "BaseAgent") -> None:
         if not agent.memory_manager:
             return
 
-        prompt = base_long_term_memory_prompt(history=agent._build_prompt())
+        prompt = base_long_term_memory_prompt(
+            history=agent._build_prompt(),
+            notes=format_notes(agent.note_taking_toolkit.notes),
+        )
 
         @retry(
-            stop=stop_after_attempt(5),
+            stop=stop_after_attempt(10),
             wait=wait_exponential(multiplier=1, min=4, max=10),
             after=collect_errors(ValidationError),
         )
         @litellm.call(
-            model=agent.slow_model_name,
+            model=agent.reflection_model,
             response_model=BaseLongTermMemory,
             json_mode=True,
         )

@@ -54,8 +54,6 @@ class BaseSelfReflection(BaseModel):
     MESSAGES: {history}
     
     USER:
-    Critique and thoughts about the conversation and your performance and your system prompt. Evaluating your performance in the conversation on a scale of 0-10. Identify strengths and successes, as well as areas for improvement. Specific examples from the conversation to illustrate your points. Finally, suggest an improved system prompt that addresses any identified issues. This is very important, as it updated your future behavior, personality, and decision making. So be very careful and thoughtful.
-    
     USER FEEDBACK:
     <>
     {user_feedback}
@@ -65,6 +63,9 @@ class BaseSelfReflection(BaseModel):
     <>
     {system_prompt}
     </>
+    
+    TASK:
+    Critique and thoughts about the conversation and your performance and your system prompt. Evaluating your performance in the conversation on a scale of 0-10. Identify strengths and successes, as well as areas for improvement. Specific examples from the conversation to illustrate your points. Finally, suggest an improved system prompt that addresses any identified issues. This is very important, as it updated your future behavior, personality, and decision making. So be very careful and thoughtful.
     """
 )
 def base_self_reflection_prompt(system_prompt, history, user_feedback): ...
@@ -78,12 +79,12 @@ async def perform_self_reflection(
         user_feedback = user_feedback or "No user feedback provided."
 
         @retry(
-            stop=stop_after_attempt(5),
+            stop=stop_after_attempt(10),
             wait=wait_exponential(multiplier=1, min=4, max=10),
             after=collect_errors(ValidationError),
         )
         @litellm.call(
-            model=agent.slow_model_name,
+            model=agent.reflection_model,
             response_model=BaseSelfReflection,
             json_mode=True,
         )

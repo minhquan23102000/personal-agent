@@ -14,7 +14,7 @@ class NotePage:
         """Format the note into a clean, readable format."""
         formatted_note = f"### Note page topic: {self.page_topic}\n\n"
         for idx, paragraph in enumerate(self.paragraphs, 1):
-            formatted_note += f"Line {idx}: {paragraph}\n"
+            formatted_note += f"Line {idx}: {paragraph}\n\n"
         return formatted_note
 
 
@@ -41,8 +41,12 @@ class NoteTakingToolkit(BaseToolKit):
     notes: dict[str, NotePage] = field(default_factory=dict)
 
     @toolkit_tool
-    def add_note(self, topic: str, paragraphs: List[str]) -> str:
+    async def add_note(self, topic: str, paragraphs: List[str]) -> str:
         """Add a new note with the given topic and paragraphs. Use this tool to save important information, knowledge, facts, ideas, plans, etc.
+        The topic should be a short and concise title.
+        Ensure the content of note is relevant, descriptive, clear, concise and avoids unnecessary details. Do not spam ineffective information to notes.
+        Ensure all important information, knowledge, facts, ideas, plans, etc. are noted.
+
 
         Args:
             self: self.
@@ -60,8 +64,8 @@ class NoteTakingToolkit(BaseToolKit):
         return f"Successfully added note: {topic}"
 
     @toolkit_tool
-    def update_note(self, topic: str, line_number: int, new_content: str) -> str:
-        """Update a specific paragraph in an existing note. Use this tool to update the content of a specific paragraph in an existing note.
+    async def update_note(self, topic: str, line_number: int, new_content: str) -> str:
+        """Update a specific paragraph in an existing note. Use this tool to update the outdated content of a specific paragraph in an existing note.
 
         Args:
             self: self.
@@ -82,7 +86,7 @@ class NoteTakingToolkit(BaseToolKit):
         return f"Successfully updated paragraph {line_number} in note: {topic}"
 
     @toolkit_tool
-    def delete_note_topic(self, topic: str) -> str:
+    async def delete_note_topic(self, topic: str) -> str:
         """Delete an entire note with all its paragraphs. Use this tool to remove a complete note topic.
 
         Args:
@@ -99,7 +103,7 @@ class NoteTakingToolkit(BaseToolKit):
         return f"Successfully deleted note: {topic}"
 
     @toolkit_tool
-    def delete_note_lines(self, topic: str, line_numbers: List[int]) -> str:
+    async def delete_note_lines(self, topic: str, line_numbers: List[int]) -> str:
         """Delete specific paragraphs from a note. Use this tool to remove one or more paragraphs from an existing note.
 
         Args:

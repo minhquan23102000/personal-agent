@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 from typing import Literal
+import pyperclip
 import rich
 from rich.console import Console
 from rich.text import Text
@@ -51,7 +52,12 @@ class ConsoleInterface:
         self.console.print(history, style="bold green")
 
     def input(self, message: str) -> str:
-        return self.console.input(message)
+        msg = self.console.input(message)
+
+        if msg == "pcb":
+            msg = pyperclip.paste()
+
+        return msg
 
 
 if __name__ == "__main__":

@@ -18,25 +18,25 @@ class BaseShortTermMemoryUpdate(BaseModel):
     """Model for short-term memory updates."""
 
     user_info: str = Field(
-        description="Any new details regarding the user's preferences, personality, background, needs, styles, habits, beliefs, your relationship with the user, how you addressed the user, or any other relevant information you have about the user."
+        description="Provide a comprehensive overview of the user's preferences, personality traits, background, needs, styles, habits, beliefs, and our relationship, ensuring all relevant details are included for a better understanding of the user."
     )
     how_to_address_user: str = Field(
         description="How you address the user? Give a concise and short note. Keep language simple and direct."
     )
     important_context: str = Field(
-        description="Capture any significant contextual elements that should be retained for future reference. Should be compressed and short as much as possible. Should be a list of bullet points in short and concise."
+        description="Capture any significant contextual elements that should be retained for future reference. Should be a list of bullet points in short and concise."
     )
     agent_beliefs: str = Field(
-        description="Adjust the your belife and understanding of the world based on insights gained from the conversation. Should be a list of bullet points."
+        description="Create a bullet-point list that reflects how your beliefs and understanding of the world have evolved based on insights gained from our conversation."
     )
     agent_info: str = Field(
-        description="How the conversation has changed you? Note and update your personality, role, name, gender, language, style, age, profile, historical background, anything beyond."
+        description="Reflect on how this conversation has influenced your personality and characteristics. Update your profile to include changes in your name, gender, language, style, age, role, historical background and anything important about you based on the discussion."
     )
     recent_goal_and_status: str = Field(
         description="Document the all the goals the user has set and their progress or status. Should be a list of bullet points in short and concise. If goal is completed, remove it from the list."
     )
     environment_info: str = Field(
-        description="Describe the environment surrounding. Anything you can experience, observe, realize, thought, hypothesis, understand, feel, etc. Objects, resources, tools, people, time, space, etc. Only note what is most meaningful and useful to you."
+        description="Provide a detailed description of your surroundings, including sensory experiences, notable objects, tools or resources, the presence of people and their interactions, as well as your thoughts, feelings, and any insights or hypotheses about the environment."
     )
 
 
@@ -45,17 +45,18 @@ class BaseShortTermMemoryUpdate(BaseModel):
     MESSAGES: {history}
     
     USER:
-    Extract and update your short-term memory based on conversation history. Think of what need to remember or update? And what need to forget or delete? Then write an updated short-term memory. Think of it is as writting a note for your future self. This is very important, as it updated your future behavior, personality, and decision making. So be very careful and thoughtful.
-    
     USER FEEDBACK:
     <>
     {user_feedback}
     </>
     
-    Updated to your current short-term memory:
+    Your current context memory:
     <>
     {current_memory}
     </>
+    
+    TASK:
+    Review recent conversation history to identify key points, tasks, and preferences that should be retained for future interactions. Note any irrelevant or outdated information that can be removed. Create a concise summary of important details to inform future behavior and decision-making, ensuring clarity and relevance. Think of it is as writting a note for your future self. This is very important, as it updated your future behavior, personality, and decision making. So be very careful and thoughtful.
     """
 )
 def short_term_memory_prompt(history, current_memory, user_feedback): ...
@@ -73,12 +74,12 @@ async def generate_updated_short_term_memory(
         )
 
         @retry(
-            stop=stop_after_attempt(5),
+            stop=stop_after_attempt(10),
             wait=wait_exponential(multiplier=1, min=4, max=10),
             after=collect_errors(ValidationError),
         )
         @litellm.call(
-            model=agent.slow_model_name,
+            model=agent.reflection_model,
             response_model=BaseShortTermMemoryUpdate,
             json_mode=True,
         )

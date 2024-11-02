@@ -67,13 +67,13 @@ def generate_agent_id() -> str:
 class BaseAgent:
     """Base class for all agents with memory integration."""
 
-    default_model_name: str = "gemini/gemini-1.5-flash-002"
-    slow_model_name: str = "gemini/gemini-1.5-flash-002"
+    default_model: str = "gemini/gemini-1.5-flash-002"
+    reflection_model: str = "gemini/gemini-1.5-flash-002"
 
     agent_id: str = field(default_factory=generate_agent_id)
     system_prompt: str = "You are an AI agent."
     temperature: float = 0.5
-    max_retries: int = 3
+    max_retries: int = 5
 
     memory_manager: Optional[MemoryManager] = None
     context_memory: Optional[ShortTermMemory] = None
@@ -103,8 +103,8 @@ class BaseAgent:
     def _initialize_agent(self) -> None:
         """Print initial agent configuration."""
         self.interface.print_system_message(f"Agent ID: {self.agent_id}")
-        self.interface.print_system_message(f"Default Model: {self.default_model_name}")
-        self.interface.print_system_message(f"Slow Model: {self.slow_model_name}")
+        self.interface.print_system_message(f"Default Model: {self.default_model}")
+        self.interface.print_system_message(f"Slow Model: {self.reflection_model}")
         self.interface.print_system_message(f"Temperature: {self.temperature}")
 
         if self.reasoning_engine:
@@ -215,7 +215,9 @@ class BaseAgent:
         )
 
         notes_prompt = (
-            format_notes(self.note_taking_toolkit.notes) if include_notes_prompt else ""
+            format_notes(self.note_taking_toolkit.notes)
+            if include_notes_prompt and self.note_taking_toolkit
+            else ""
         )
 
         return {
@@ -232,7 +234,7 @@ class BaseAgent:
         self.history.append(message)
         await self.store_turn_message(message, "assistant")
 
-    @litellm.call(model=default_model_name)
+    @litellm.call(model=default_model)
     async def _default_call(
         self, query: BaseMessageParam | None = None, include_tools: bool = True
     ) -> BaseDynamicConfig:
@@ -291,7 +293,7 @@ class BaseAgent:
         after=collect_errors(ValidationError),
     )
     async def _default_step(
-        self, *, errors: list[ValidationError] | None = None
+        self, include_tools: bool = True, *, errors: list[ValidationError] | None = None
     ) -> tuple[bool, OpenAICallResponse]:
         """Execute the default step of the agent. With current state and context history. Return True if the step agent use tool call."""
         use_tool_call = False
@@ -308,11 +310,10 @@ class BaseAgent:
                 )
             )
             self.history.append(correct_action_query)
-            self.interface.print_user_message(correct_action_query)
+            self.interface.print_user_message(correct_action_query.content)
 
         # response call
-        response = await self._default_call()  # type: ignore
-        await self._assitant_turn_message(response.message_param)
+        response = await self._default_call(include_tools=include_tools)  # type: ignore
         self.interface.print_agent_message(response.content)
 
         # tool call
@@ -320,6 +321,9 @@ class BaseAgent:
             tool_output_messages = await self._process_tools(response.tools, response)
             self.history.extend(tool_output_messages)  # type: ignore
             use_tool_call = True
+
+        # assistant turn message after tool call to make sure the tool call is successful before add to history
+        await self._assitant_turn_message(response.message_param)
 
         return use_tool_call, response
 
@@ -329,9 +333,8 @@ class BaseAgent:
     ):
         """Execute one step of the agent's reasoning process."""
         try:
-            if query:
-                await self.store_turn_message(query, "user")
-                self.history.append(query)
+            await self.store_turn_message(query, "user")
+            self.history.append(query)
 
             # reasoning loop
             if self.reasoning_engine:
@@ -339,7 +342,7 @@ class BaseAgent:
             else:
                 use_tool_call, response = await self._default_step()
                 if use_tool_call:
-                    return self.step("")
+                    return self.step(Messages.User(""))
 
         except Exception as e:
             self.interface.print_system_message(
@@ -348,21 +351,36 @@ class BaseAgent:
             )
             return str(e)
 
+    async def update_config(self, config_str: str) -> None:
+        """Update the agent's configuration."""
+        parameters = config_str.split(" ")
+        if len(parameters) == 2:
+            key, value = parameters
+
+            setattr(self.reasoning_engine, key, value)
+            self.interface.print_system_message(
+                f"Updated {key} to {value}", type="info"
+            )
+
     async def run(self) -> None:
         """Run the agent in an interactive loop."""
         try:
             await self.initialize_conversation()
-            self.interface.print_system_message("Type pcb to paste clipboard content.")
+
             self.interface.print_system_message(
                 "Type exit or quit to end the conversation."
             )
 
+            update_config_prefix = "--"
+
             while True:
                 query = self.interface.input("[User]: ")
 
-                # Check if the input is empty and if so, try to get the clipboard content
-                if query == "pcb":
-                    query = pyperclip.paste()
+                while query.startswith(update_config_prefix):
+                    query = query[len(update_config_prefix) :]
+                    await self.update_config(query)
+
+                    query = self.interface.input("[User]: ")
 
                 if query.lower() in ["exit", "quit"]:
                     break
