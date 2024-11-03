@@ -55,7 +55,10 @@ class DuckDuckGoSearchTool(BaseTool):
             formatted_results.append(
                 f"Title: {result.title}\nLink: {result.link}\nSnippet: {result.snippet}\n"
             )
-        return "\n---\n".join(formatted_results)
+        return (
+            "\n---\n".join(formatted_results)
+            + "\n---\nUse the WebReaderTool to access and read the full content of the most relevant search results if needed for more comprehensive and relevant information."
+        )
 
     async def call(self) -> str:
         """

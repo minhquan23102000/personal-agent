@@ -1,5 +1,5 @@
 import inspect
-from mirascope.core import prompt_template, litellm, Messages
+from mirascope.core import prompt_template, gemini, Messages
 from pydantic import BaseModel, Field
 from typing import TYPE_CHECKING
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -75,7 +75,7 @@ async def generate_updated_short_term_memory(
             wait=wait_exponential(multiplier=1, min=4, max=60),
             after=collect_errors(ValidationError),
         )
-        @litellm.call(
+        @gemini.call(
             model=agent.reflection_model,
             response_model=BaseShortTermMemoryUpdate,
             json_mode=True,

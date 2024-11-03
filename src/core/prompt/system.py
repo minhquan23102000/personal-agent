@@ -20,7 +20,7 @@ def build_recent_conversation_context(summaries: List["ConversationSummary"]) ->
 
     return inspect.cleandoc(
         f"""
-# RECENT CONVERSATIONS SUMMARIES:
+## RECENT CONVERSATIONS SUMMARIES:
 {conversation_context}
         """
     ).strip()
@@ -59,9 +59,6 @@ def build_short_term_memory_prompt(agent: "BaseAgent") -> str:
 
 ## HOW TO ADDRESS USER: 
 {agent.context_memory.how_to_address_user}
-
-## LAST CONVERSATION SUMMARY on {agent.context_memory.timestamp.strftime("%Y-%m-%d %H:%M:%S")}:
-{agent.context_memory.last_conversation_summary}
 
 ## RECENT GOALS AND STATUS: 
 {agent.context_memory.recent_goal_and_status}

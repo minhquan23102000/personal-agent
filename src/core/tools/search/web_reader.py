@@ -25,8 +25,6 @@ class WebReaderTool(BaseTool):
     urls: List[str] = Field(
         ...,
         description="List of URLs to read content from. Minimum is 1 URL, Maximum is 5 URLs.",
-        max_length=7,
-        min_length=1,
     )
 
     def __clean_text(self, text: str) -> str:

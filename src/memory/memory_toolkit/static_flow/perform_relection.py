@@ -6,7 +6,7 @@ from jsonschema import ValidationError
 from mirascope.core import (
     prompt_template,
     BaseMessageParam,
-    litellm,
+    gemini,
     BaseDynamicConfig,
     Messages,
 )
@@ -85,7 +85,7 @@ async def perform_self_reflection(
             wait=wait_exponential(multiplier=1, min=4, max=60),
             after=collect_errors(ValidationError),
         )
-        @litellm.call(
+        @gemini.call(
             model=agent.reflection_model,
             response_model=BaseSelfReflection,
             json_mode=True,

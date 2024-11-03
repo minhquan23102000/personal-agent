@@ -741,7 +741,16 @@ class SQLiteDatabase(BaseDatabase):
                     LIMIT ?
                 )
                 SELECT 
-                    s.*,
+                    s.conversation_id,
+                    s.user_info,
+                    s.last_conversation_summary,
+                    s.recent_goal_and_status,
+                    s.important_context,
+                    s.agent_beliefs,
+                    s.agent_info,
+                    s.environment_info,
+                    s.how_to_address_user,
+                    s.timestamp,
                     vm.distance
                 FROM short_term_memory_state s
                 JOIN vector_matches vm ON s.id = vm.id
@@ -753,16 +762,18 @@ class SQLiteDatabase(BaseDatabase):
             rows = cursor.fetchall()
             return [
                 ShortTermMemory(
-                    conversation_id=row[1],
-                    user_info=row[2],
-                    last_conversation_summary=row[3],
-                    recent_goal_and_status=row[4],
-                    important_context=row[5],
-                    agent_beliefs=row[6],
-                    agent_info=row[7],
-                    environment_info=row[8],
-                    timestamp=row[10],
-                    how_to_address_user=row[9],
+                    conversation_id=row[0],
+                    user_info=row[1],
+                    last_conversation_summary=row[2],
+                    recent_goal_and_status=row[3],
+                    important_context=row[4],
+                    agent_beliefs=row[5],
+                    agent_info=row[6],
+                    environment_info=row[7],
+                    how_to_address_user=row[8],
+                    timestamp=datetime.fromisoformat(row[9])
+                    if isinstance(row[9], str)
+                    else row[9],
                 )
                 for row in rows
             ]

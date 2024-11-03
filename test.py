@@ -45,3 +45,6 @@ if tool := response.tool:
 
 new_response = test(history)
 print(new_response.content)
+history.append(new_response.message_param)
+
+print(history)

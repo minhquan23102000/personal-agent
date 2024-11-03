@@ -11,6 +11,7 @@ from mirascope.core import (
     Messages,
     prompt_template,
     litellm,
+    gemini,
 )
 
 from mirascope.core.openai import OpenAICallResponse
@@ -77,8 +78,8 @@ def generate_agent_id() -> str:
 class BaseAgent:
     """Base class for all agents with memory integration."""
 
-    default_model: str = "gemini/gemini-1.5-flash-002"
-    reflection_model: str = "gemini/gemini-1.5-flash-002"
+    default_model: str = "gemini-1.5-flash-002"
+    reflection_model: str = "gemini-1.5-pro-002"
 
     agent_id: str = field(default_factory=generate_agent_id)
     system_prompt: str = "You are an AI agent."
@@ -98,14 +99,14 @@ class BaseAgent:
 
     conversation_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     max_history: Optional[int] = None
-    history: List[BaseMessageParam | Messages.Type | OpenAICallResponse] = field(
+    history: List[BaseMessageParam | Messages.Type | gemini.GeminiMessageParam] = field(
         default_factory=list
     )
 
     interface: BaseInterface = field(default_factory=lambda: ConsoleInterface())
 
     recent_conversations: List[ConversationSummary] = field(default_factory=list)
-    num_recent_conversations: int = 7
+    num_recent_conversations: int = 4
 
     def __post_init__(self) -> None:
         """Initialize the agent after dataclass initialization."""
@@ -124,6 +125,8 @@ class BaseAgent:
             self.interface.print_system_message(
                 f"Reasoning Engine: {self.reasoning_engine.__class__.__name__}"
             )
+
+        self._initialize_note_taking_toolkit()
 
     def _setup_api_keys(self) -> None:
         """Setup API key rotation if configured."""
@@ -157,9 +160,9 @@ class BaseAgent:
                 api_key = self.rotating_api_keys.rotate()
                 os.environ[self.api_key_env_var] = str(api_key)
 
-                self.interface.print_system_message(
-                    f"Current api key: {os.environ[self.api_key_env_var]}"
-                )
+                # self.interface.print_system_message(
+                #     f"Current api key: {os.environ[self.api_key_env_var]}"
+                # )
 
     def add_tools(self, tools: List[Union[Type[BaseTool], Callable]]) -> None:
         self.tools.extend(tools)
@@ -274,7 +277,7 @@ class BaseAgent:
         self.history.append(message)
         await self.store_turn_message(message, "assistant")
 
-    @litellm.call(model=default_model)
+    @gemini.call(model=default_model)
     def _default_call(
         self, query: BaseMessageParam | None = None, include_tools: bool = True
     ) -> BaseDynamicConfig:
@@ -334,7 +337,7 @@ class BaseAgent:
 
     @retry(
         stop=stop_after_attempt(max_retries),
-        wait=wait_exponential(multiplier=1, min=4, max=15),
+        wait=wait_exponential(multiplier=1, min=4, max=30),
         after=collect_errors(ValidationError),
     )
     async def _default_step(
@@ -342,6 +345,7 @@ class BaseAgent:
     ) -> tuple[bool, OpenAICallResponse]:
         """Execute the default step of the agent. With current state and context history. Return True if the step agent use tool call."""
         use_tool_call = False
+        correct_action_query = None
 
         if errors:
 
@@ -350,16 +354,16 @@ class BaseAgent:
                     f"""
                 !! This is an remind auto message !! 
                 There are some error in the last step when indicate that you pass the wrong parameters when use tool. 
-                Error: <> {format_error_message(errors)} </>."
+                Error: <> {format_error_message([errors[-1]])} </>."
                 Correct the parameters indicated in the error message and re-execute the action immediately without further discussion.
                 """
                 )
             )
-            self.history.append(correct_action_query)
+            # self.history.append(correct_action_query)
             self.interface.print_user_message(correct_action_query.content)
 
         # response call
-        response = self._default_call(include_tools=include_tools)  # type: ignore
+        response = self._default_call(query=correct_action_query, include_tools=include_tools)  # type: ignore
         self.interface.print_agent_message(response.content)
 
         # tool call
@@ -455,8 +459,13 @@ class BaseAgent:
                     await self.memory_manager.reflection_conversation(user_feedback)
 
     def norm_message_type(
-        self, message: BaseMessageParam | Messages.Type | str | dict, role: str
+        self,
+        message: (
+            BaseMessageParam | Messages.Type | str | dict | gemini.GeminiMessageParam
+        ),
+        role: str,
     ) -> BaseMessageParam:
+
         if isinstance(message, BaseMessageParam):
             return message
 
@@ -486,7 +495,8 @@ class BaseAgent:
                 message = self.norm_message_type(message, role)
             except Exception as e:
                 self.interface.print_system_message(
-                    f"Error converting message to base message param: {e}", type="error"
+                    f"Error converting message to base message param: {e}. Message: {message}",
+                    type="error",
                 )
                 return
 

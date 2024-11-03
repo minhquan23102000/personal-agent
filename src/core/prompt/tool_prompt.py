@@ -31,7 +31,9 @@ Description:
 
 
 def clean_args_in_tool_description(tool_description: str) -> str:
-    return tool_description.split("Args:")[0].strip()
+    # return tool_description.split("Args:")[0].strip()
+
+    return tool_description.replace("self: self.", "").strip()
 
 
 def build_prompt_from_tool(tool: BaseTool | Callable) -> str:

@@ -8,6 +8,7 @@ from mirascope.core import (
     Messages,
     prompt_template,
     litellm,
+    gemini,
 )
 from tenacity import retry, stop_after_attempt, wait_exponential
 from mirascope.retries.tenacity import collect_errors
@@ -40,7 +41,7 @@ class ReasoningAction(pydantic.BaseModel):
         description="Talk to user in this action? True if you do.",
     )
     action: str = pydantic.Field(
-        description="Identify the most impactful actions you can take right now based on your current thoughts and feelings. List any tools or resources you need for these actions."
+        description="Determine the most significant action you can take immediately based on your current thoughts and feelings. Identify any tools or resources required for this action. Include only one action at a time to ensure clarity and effectiveness. Do not add plan here."
     )
     talk_to_user_flag_2: bool = pydantic.Field(
         description="Talk to user in this action? True if you do.",
@@ -51,7 +52,7 @@ class ReasoningAction(pydantic.BaseModel):
 class ReactEngine:
     """Handles the react loop logic for agents."""
 
-    model_name: str = "gemini/gemini-1.5-flash-002"
+    model_name: str = "gemini-1.5-flash-002"
     max_retries: int = 3
     max_deep: int = 3
 
@@ -87,10 +88,10 @@ class ReactEngine:
 
     @retry(
         stop=stop_after_attempt(max_retries),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
+        wait=wait_exponential(multiplier=1, min=4, max=30),
         after=collect_errors(ValidationError),
     )
-    @litellm.call(
+    @gemini.call(
         model=model_name,
         response_model=ReasoningAction,
         json_mode=True,
@@ -110,10 +111,9 @@ class ReactEngine:
         reasoning_response: ReasoningAction,
     ) -> dict:
         """Execute the action."""
-        query = Messages.Assistant(
-            f"Let's execute the action '{reasoning_response.action}'"
-        )
-        agent.history.append(query)
+        # agent.history.append(
+        #     Messages.Assistant(f"Let's execute the step by step of the action plan")
+        # )
         use_tool_call, response = await agent._default_step()
 
         # condtion to break the loop
@@ -143,7 +143,7 @@ class ReactEngine:
             agent_reasoning_message = Messages.Assistant(reasoning_message)
             agent.history.append(agent_reasoning_message)
 
-            logger.debug(f"reasoning_response: {reasoning_response}")
+            # logger.debug(f"reasoning_response: {reasoning_response}")
 
             # action step
             action_result = await self._action_step(agent, reasoning_response)

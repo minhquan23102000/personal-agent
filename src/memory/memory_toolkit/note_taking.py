@@ -109,9 +109,6 @@ class NoteTakingToolkit(BaseToolKit):
 
         Args:
             topic: The topic of the note to delete.
-
-        Returns:
-            str: Success or failure message.
         """
         if topic not in self.notes:
             return f"Note with topic '{topic}' not found"
@@ -128,9 +125,6 @@ class NoteTakingToolkit(BaseToolKit):
             self: self.
             topic: The topic of the note.
             line_numbers: List of 1-based line numbers to delete.
-
-        Returns:
-            str: Success or failure message.
         """
         if topic not in self.notes:
             return f"Note with topic '{topic}' not found"
@@ -151,3 +145,25 @@ class NoteTakingToolkit(BaseToolKit):
 
         logger.debug(format_notes(self.notes))
         return f"Successfully deleted paragraphs {line_numbers} from note: {topic}"
+
+
+async def main():
+    note_taking_toolkit = NoteTakingToolkit()
+    print(await note_taking_toolkit.add_note("test", ["test1", "test2"]))
+    await note_taking_toolkit.add_note("test2", ["test3", "test4"])
+
+    await note_taking_toolkit.update_note("test", 1, "test5")
+    print(await note_taking_toolkit.delete_note_lines("test", [1]))
+    print(await note_taking_toolkit.delete_note_topic("test2"))
+
+    # save notes to file
+    save_notes("test note", note_taking_toolkit.notes)
+
+    # load notes
+    print(load_notes("test note"))
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(main())
