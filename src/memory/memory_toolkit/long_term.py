@@ -115,7 +115,7 @@ class LongtermMemoryToolKit(BaseToolKit):
             return f"Error searching relationships: {str(e)}. Traceback: {traceback.format_exc()}"
 
     @toolkit_tool
-    async def recall_similar_conversation_contexts(self, query: str) -> str:
+    async def recall_similar_conversation_contexts(self, context_query: str) -> str:
         """Search for similar conversation contexts from your memory to help understand the current situation better.
 
         You can use this function in following scenarios:
@@ -125,7 +125,7 @@ class LongtermMemoryToolKit(BaseToolKit):
         Use this when you do not have context in the current moment for a specific topic user asking or for task you are working on.
 
         Args:
-            query (str): The query string to search for similar conversation contexts. Make sure it describes details of the current situation and context, for efficient search.
+            context_query (str): Summary of the current conversation context as a context query string.
         """
         try:
             if not self.memory_manager:
@@ -133,9 +133,9 @@ class LongtermMemoryToolKit(BaseToolKit):
 
             similar_memories = (
                 await self.memory_manager.search_similar_short_term_memories(
-                    query=query,
+                    query=context_query,
                     limit=3,
-                    threshold=max(self.similarity_threshold - 0.25, 0.1),
+                    threshold=max(self.similarity_threshold - 0.3, 0.1),
                 )
             )
 
@@ -179,9 +179,7 @@ class LongtermMemoryToolKit(BaseToolKit):
 
         You can use this function in following scenarios:
         - When you need to understand the full context of a past conversation
-        - When you need to reference specific details from a previous conversation
         - When you need to analyze how a particular conversation evolved
-        - When you need to verify what was previously discussed or agreed upon
 
         Args:
             conversation_id (str): The unique identifier of the conversation to retrieve. This should be a valid conversation ID from the recent conversations context.

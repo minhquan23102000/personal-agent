@@ -461,10 +461,16 @@ class BaseAgent:
             return message
 
         if isinstance(message, dict):
-            return BaseMessageParam(
-                role=role,
-                content=str(message["tool_calls"]),
-            )
+            if role.lower() != "tool":
+                return BaseMessageParam(
+                    role=role,
+                    content=str(message["content"]),
+                )
+            else:
+                return BaseMessageParam(
+                    role=role,
+                    content=str(message["tool_calls"]),
+                )
 
         return BaseMessageParam(role=role, content=str(message))
 
@@ -482,6 +488,9 @@ class BaseAgent:
                 self.interface.print_system_message(
                     f"Error converting message to base message param: {e}", type="error"
                 )
+                return
+
+            if not message.content or len(message.content) == 0:
                 return
 
             await self.memory_manager.store_conversation(

@@ -722,6 +722,7 @@ class SQLiteDatabase(BaseDatabase):
         self,
         query_embedding: List[float],
         limit: int = 5,
+        similarity_threshold: float = 0.1,
     ) -> List[ShortTermMemory]:
         """Search for similar short-term memories using cosine similarity"""
         async with self.get_connection() as conn:
@@ -746,7 +747,7 @@ class SQLiteDatabase(BaseDatabase):
                 JOIN vector_matches vm ON s.id = vm.id
                 ORDER BY vm.distance
                 """,
-                (query_json, query_json, self.similarity_threshold, limit),
+                (query_json, query_json, 1 - similarity_threshold, limit),
             )
 
             rows = cursor.fetchall()
