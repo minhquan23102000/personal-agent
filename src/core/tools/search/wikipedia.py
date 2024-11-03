@@ -8,7 +8,7 @@ from mirascope.core import BaseTool
 
 class WikipediaSearchContentTool(BaseTool):
     """
-    A tool for searching Wikipedia articles (a big library of knowledge about the world) and retrieving content. Only useful if you want to find facts, knowledges, or historical events.
+    A tool for searching Wikipedia articles (a big library of knowledge about the world) and retrieving content. Useful if you want to find facts, knowledges, or historical events.
     """
 
     query: str = Field(

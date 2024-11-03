@@ -32,10 +32,10 @@ class ConsoleInterface:
         self.console.print(panel)
 
     def print_user_message(self, message: Any) -> None:
-        self.print_box(message, title="User", style="bold green")
+        self.print_box(message, title="User", style="bold blue")
 
     def print_agent_message(self, message: Any) -> None:
-        self.print_box(message, title="Agent", style="bold blue")
+        self.print_box(message, title="Agent", style="bold green")
 
     def print_system_message(
         self, message: str, type: Literal["info", "warning", "error"] = "info"

@@ -23,7 +23,7 @@ class DuckDuckGoSearchTool(BaseTool):
     This tool is useful for finding information on the internet.
     You can use this tools to research topics, find answers to questions, or get information on specific people, companies, events, etc.
 
-    !!IMPORTANT NOTE: THIS IS JUST RETURN URL, TITLE, SUMMARY OF THE SEARCH NOT THE FULL CONTEXT. YOU MAY NEED USE WEB READER TO LOAD THE CONTENT AFTER USE THIS TOOL.
+    !!IMPORTANT: THIS IS JUST RETURN URL, TITLE, SUMMARY OF THE SEARCH NOT THE FULL CONTEXT. YOU MAY NEED USE WEB_READER TOOL TO LOAD THE DETAIL CONTENT.
 
     Examples:
         - Finding information on "Latest developments in AI 2024"
@@ -70,7 +70,7 @@ class DuckDuckGoSearchTool(BaseTool):
                     keywords=self.query,
                     region="wt-wt",
                     # safesearch=self.safesearch,
-                    max_results=10,
+                    max_results=7,
                 )
 
                 search_results = []

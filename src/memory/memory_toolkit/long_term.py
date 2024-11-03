@@ -7,7 +7,7 @@ from src.memory.memory_manager import MemoryManager, SearchResult
 import inspect
 
 
-class DynamicMemoryToolKit(BaseToolKit):
+class LongtermMemoryToolKit(BaseToolKit):
     """Toolkit for managing memory operations including storage and retrieval. Use this toolkit to store and retrieve knowledge, facts, entities, relationships, and conversation contexts."""
 
     __namespace__ = "long_term_memory_database"
@@ -125,7 +125,7 @@ class DynamicMemoryToolKit(BaseToolKit):
         - When you want to learn from past interactions to improve current responses
         - When you need to understand patterns in user behavior or conversation flow
 
-        The function will search through past conversation contexts using semantic similarity and return the most relevant ones.
+        Use this when you do not have context in the current moment for a specific topic user asking or for task you are working on.
 
         Args:
             query (str): The query string to search for similar conversation contexts. Make sure it describes details of the current situation and context, for efficient search.
@@ -177,6 +177,6 @@ class DynamicMemoryToolKit(BaseToolKit):
             return f"Error searching conversation contexts: {str(e)}. Traceback: {traceback.format_exc()}"
 
 
-def get_memory_toolkit(memory_manager: "MemoryManager") -> DynamicMemoryToolKit:
+def get_memory_toolkit(memory_manager: "MemoryManager") -> LongtermMemoryToolKit:
     """Get configured memory toolkit instance."""
-    return DynamicMemoryToolKit(memory_manager=memory_manager)
+    return LongtermMemoryToolKit(memory_manager=memory_manager)

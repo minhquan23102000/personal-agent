@@ -19,7 +19,7 @@ from mirascope.retries.tenacity import collect_errors
 from pydantic import ValidationError
 from src.memory.memory_manager import MemoryManager
 from src.memory.models import MessageType, ShortTermMemory
-from src.memory.memory_toolkit.dynamic_flow import get_memory_toolkit
+from src.memory.memory_toolkit.long_term import get_memory_toolkit
 from src.util.rotating_list import RotatingList
 import os
 import pyperclip
@@ -141,7 +141,6 @@ class BaseAgent:
 
     def _initialize_note_taking_toolkit(self) -> None:
         """Initialize the note taking toolkit."""
-        self.note_taking_toolkit.agent_id = self.agent_id
         self.note_taking_toolkit.notes = load_notes(self.agent_id)
 
     def rotate_api_key(self) -> None:

@@ -56,8 +56,6 @@ class NoteTakingToolkit(BaseToolKit):
 
     __namespace__ = "note_taking"
 
-    agent_id: str
-
     notes: dict[str, NotePage] = field(default_factory=dict)
 
     @toolkit_tool

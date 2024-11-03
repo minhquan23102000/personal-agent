@@ -32,14 +32,12 @@ class BaseLongTermMemory(BaseModel):
     MESSAGES: {history}
     
     USER:
-    TASK:
-    
     Extract important knowledge, entities, and relationships from the conversation above that should be stored in long-term memory.
     Focus on factual information, knowledge, key insights, and meaningful relationships between concepts or entities.
     
     Format each knowledge item as a separate, clear statement.
     Format relationships as short and concise "entity1 relationship entity2" statements.
-    Do not include temporary information or context that is not important for long-term memory.
+    Do not include temporary information or contextual information for long-term memory. Prioritize knowledges and facts.
     
     !! Important: Capture all essential information in this single interaction. Because you will only have one chance to store the information.
     """
