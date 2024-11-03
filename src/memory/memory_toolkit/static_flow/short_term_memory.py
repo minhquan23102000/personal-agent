@@ -50,13 +50,8 @@ class BaseShortTermMemoryUpdate(BaseModel):
     {user_feedback}
     </>
     
-    Your current context memory:
-    <>
-    {current_memory}
-    </>
-    
     TASK:
-    Review recent conversation history to identify key points, tasks, and preferences that should be retained for future interactions. Note any irrelevant or outdated information that can be removed. Create a concise summary of important details to inform future behavior and decision-making, ensuring clarity and relevance. Think of it is as writting a note for your future self. This is very important, as it updated your future behavior, personality, and decision making. So be very careful and thoughtful.
+    Review recent conversation history to identify key points, tasks, and preferences that should be retained for future interactions. Note any irrelevant or outdated information that can be removed. Create a concise list of important details to inform future behavior and decision-making, ensuring clarity and relevance. Think of it is as writting a note for your future self. This is very important, as it updated your future behavior, personality, and decision making. So be very careful and thoughtful.
     """
 )
 def short_term_memory_prompt(history, current_memory, user_feedback): ...
@@ -75,7 +70,7 @@ async def generate_updated_short_term_memory(
 
         @retry(
             stop=stop_after_attempt(10),
-            wait=wait_exponential(multiplier=1, min=4, max=10),
+            wait=wait_exponential(multiplier=1, min=4, max=60),
             after=collect_errors(ValidationError),
         )
         @litellm.call(

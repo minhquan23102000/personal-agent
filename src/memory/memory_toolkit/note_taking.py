@@ -3,6 +3,9 @@ from typing import TYPE_CHECKING, List, Optional
 from mirascope.core import BaseToolKit, toolkit_tool
 from pydantic import Field, ValidationError
 from loguru import logger
+from src.config import DATA_DIR
+
+import json
 
 
 @dataclass
@@ -16,6 +19,21 @@ class NotePage:
         for idx, paragraph in enumerate(self.paragraphs, 1):
             formatted_note += f"Line {idx}: {paragraph}\n\n"
         return formatted_note
+
+
+def save_notes(agent_id: str, notes: dict[str, NotePage]) -> None:
+    """Save all notes to a JSON file."""
+    with open(DATA_DIR / f"{agent_id}_notes.json", "w") as f:
+        json.dump({topic: note.__dict__ for topic, note in notes.items()}, f, indent=4)
+
+
+def load_notes(agent_id: str) -> dict[str, NotePage]:
+    """Load all notes from a JSON file."""
+    notes_file_path = DATA_DIR / f"{agent_id}_notes.json"
+    if notes_file_path.exists():
+        with open(notes_file_path, "r") as f:
+            return {topic: NotePage(**note) for topic, note in json.load(f).items()}
+    return {}
 
 
 def format_notes(notes: dict[str, NotePage]) -> str:
@@ -37,6 +55,8 @@ class NoteTakingToolkit(BaseToolKit):
     """This is agent's note taking. Use this tool to save important information, knowledge, facts, ideas, plans, etc."""
 
     __namespace__ = "note_taking"
+
+    agent_id: str
 
     notes: dict[str, NotePage] = field(default_factory=dict)
 

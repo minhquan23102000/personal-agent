@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from src.core.prompt.error_prompt import format_error_message
 from src.core.prompt.tool_prompt import get_list_tools_name
+from loguru import logger
 
 if TYPE_CHECKING:
     from src.agent.base_agent import BaseAgent
@@ -24,10 +25,10 @@ class ReasoningAction(pydantic.BaseModel):
     """Thought and action reasoning."""
 
     feeling: str = pydantic.Field(
-        description="Your feeling about the current situation, obervation. Using short keywords to describe your feeling, format in uppercase. If you don't have any feeling, just leave this empty string."
+        description="Describe your feelings using short keywords, format in uppercase. If none, leave it blank."
     )
     thought: str = pydantic.Field(
-        description="Your thought or plan for the current situation, obervation."
+        description="Provide your analysis and thought of the current situation, highlighting key observations and insights that reflect the context and implications."
     )
     goal_completed: bool = pydantic.Field(
         description="True if you have completed the final goal or a milestone goal.",
@@ -39,7 +40,7 @@ class ReasoningAction(pydantic.BaseModel):
         description="Talk to user in this action? True if you do.",
     )
     action: str = pydantic.Field(
-        description="From thought and feeling, identify the most effective actions to take in this very moment, not the plan in future. It is possible to combine multiple actions, but be mindful that some may not be feasible or easy to execute simultaneously, unless you are confident. Include what tools you need to use to do the action if applicable."
+        description="Identify the most impactful actions you can take right now based on your current thoughts and feelings. List any tools or resources you need for these actions."
     )
     talk_to_user_flag_2: bool = pydantic.Field(
         description="Talk to user in this action? True if you do.",
@@ -64,11 +65,8 @@ class ReactEngine:
 
         return inspect.cleandoc(
             f"""
-            # Agent's note (this is for agent's reference, not for user):
             * Feeling: {response.feeling}
             * Thought: {response.thought}
-            * Do I reach the final goal or have the final answer: {"Yes" if response.goal_completed or response.got_final_answer else "No"}
-            * Talk to {how_to_address_user} in this action: {"Yes" if response.talk_to_user or response.talk_to_user_flag_2 else "No"}
             * Action: {response.action}
             """
         )
@@ -113,7 +111,7 @@ class ReactEngine:
     ) -> dict:
         """Execute the action."""
         query = Messages.Assistant(
-            f"Let's execute the action {reasoning_response.action}"
+            f"Let's execute the action '{reasoning_response.action}'"
         )
         agent.history.append(query)
         use_tool_call, response = await agent._default_step()
@@ -145,6 +143,8 @@ class ReactEngine:
             agent_reasoning_message = Messages.Assistant(reasoning_message)
             agent.history.append(agent_reasoning_message)
 
+            logger.debug(f"reasoning_response: {reasoning_response}")
+
             # action step
             action_result = await self._action_step(agent, reasoning_response)
 
@@ -154,5 +154,9 @@ class ReactEngine:
 
         # if agent use tool call, continue to step for agent handle tool output
         use_tool_call = action_result["use_tool_call"]
-        while use_tool_call:
-            use_tool_call, response = await agent._default_step(include_tools=False)
+        while use_tool_call and i < self.max_deep:
+            # append empty message to history
+
+            # tool call step
+            use_tool_call, response = await agent._default_step()
+            i += 1

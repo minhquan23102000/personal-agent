@@ -36,7 +36,13 @@ from src.core.prompt.tool_prompt import (
 from src.interface import ConsoleInterface, BaseInterface
 
 from src.core.reasoning.base import BaseReasoningEngine
-from src.memory.memory_toolkit.note_taking import NoteTakingToolkit, format_notes
+from src.memory.memory_toolkit.note_taking import (
+    NoteTakingToolkit,
+    format_notes,
+    save_notes,
+    load_notes,
+)
+
 
 GEMINI_SAFETY_SETTINGS = [
     {
@@ -132,6 +138,11 @@ class BaseAgent:
             self.memory_manager.set_agent(self)
 
             self.add_tools(self.note_taking_toolkit.create_tools())
+
+    def _initialize_note_taking_toolkit(self) -> None:
+        """Initialize the note taking toolkit."""
+        self.note_taking_toolkit.agent_id = self.agent_id
+        self.note_taking_toolkit.notes = load_notes(self.agent_id)
 
     def rotate_api_key(self) -> None:
         """Rotate the api key."""
@@ -275,7 +286,12 @@ class BaseAgent:
             f"Calling Tool '{tool._name()}' with args {tool.args}"
         )
         try:
-            output = await tool.call()
+            # if tool is async, it will be called as await tool.call()
+            if inspect.iscoroutinefunction(tool.call):
+                output = await tool.call()
+            else:
+                output = tool.call()
+
             self.interface.print_system_message(f"Tool output: {output}")
             return output
         except ValidationError as e:
@@ -299,6 +315,7 @@ class BaseAgent:
         use_tool_call = False
 
         if errors:
+
             correct_action_query = Messages.User(
                 inspect.cleandoc(
                     f"""
@@ -319,11 +336,13 @@ class BaseAgent:
         # tool call
         if response.tools:
             tool_output_messages = await self._process_tools(response.tools, response)
+            # store message to history before tool, make sure the tool call is successful before add to history
+            await self._assitant_turn_message(response.message_param)
             self.history.extend(tool_output_messages)  # type: ignore
             use_tool_call = True
-
-        # assistant turn message after tool call to make sure the tool call is successful before add to history
-        await self._assitant_turn_message(response.message_param)
+        else:
+            # store message to history directly
+            await self._assitant_turn_message(response.message_param)
 
         return use_tool_call, response
 
@@ -388,11 +407,6 @@ class BaseAgent:
                 query = Messages.User(query)
                 await self.step(query)
 
-                # print agent notes
-                self.interface.print_system_message(
-                    f"Agent's notes:\n{format_notes(self.note_taking_toolkit.notes)}"
-                )
-
         except Exception as e:
             self.interface.print_system_message(
                 f"Error in run: {e}. Traceback: {traceback.format_exc()}", type="error"
@@ -403,6 +417,9 @@ class BaseAgent:
 
             if self.memory_manager:
                 if len(self.history) >= 4:
+                    # save notes
+                    save_notes(self.agent_id, self.note_taking_toolkit.notes)
+
                     user_feedback = self.interface.input(
                         f"Please provide your feedback for the conversation with {self.agent_id}: "
                     )

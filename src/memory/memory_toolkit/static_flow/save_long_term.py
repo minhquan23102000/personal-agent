@@ -31,12 +31,7 @@ class BaseLongTermMemory(BaseModel):
     """
     MESSAGES: {history}
     
-    USER
-    AGENT (YOUR) NOTES IN CURRENT CONVERSATION:
-    <>
-    {notes}
-    </>
-    
+    USER:
     TASK:
     
     Extract important knowledge, entities, and relationships from the conversation above that should be stored in long-term memory.
@@ -65,11 +60,11 @@ async def save_long_term_memory(agent: "BaseAgent") -> None:
 
         @retry(
             stop=stop_after_attempt(10),
-            wait=wait_exponential(multiplier=1, min=4, max=10),
+            wait=wait_exponential(multiplier=1, min=4, max=60),
             after=collect_errors(ValidationError),
         )
         @litellm.call(
-            model=agent.reflection_model,
+            model=agent.default_model,
             response_model=BaseLongTermMemory,
             json_mode=True,
         )

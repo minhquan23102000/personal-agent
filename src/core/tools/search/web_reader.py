@@ -50,7 +50,7 @@ class WebReaderTool(BaseTool):
     async def __read_single_url(self, url: str) -> str:
         """Process a single URL and return formatted content"""
         if not self.__validate_url(url):
-            return f"\nURL: {url}\nError: Invalid URL format"
+            return f"\nURL: {url}\n\nError: Invalid URL format"
 
         try:
             response = requests.get(url, timeout=10)
@@ -60,10 +60,10 @@ class WebReaderTool(BaseTool):
             title = soup.title.string if soup.title else ""
             content = self.__extract_main_content(soup)
 
-            return f"\nURL: {url}\n" f"Title: {title}\n" f"Content: {content}"
+            return f"\nURL: {url}\n\nTitle: {title}\n\nContent: {content}"
 
         except requests.RequestException as e:
-            return f"\nURL: {url}\nError: Failed to fetch URL: {str(e)}"
+            return f"\nURL: {url}\n\nError: Failed to fetch URL: {str(e)}"
 
     async def call(self) -> str:
         """Process multiple URLs and return their contents in a formatted string"""
