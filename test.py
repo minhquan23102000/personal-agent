@@ -1,14 +1,23 @@
-from mirascope.core import litellm, BaseMessageParam, prompt_template, gemini
 from rich import print
 
-history: list[BaseMessageParam | gemini.GeminiCallResponse] = [
-    BaseMessageParam(role="user", content="Hello, AI!"),
-    BaseMessageParam(role="agent 001", content="Hello, user!"),
-    BaseMessageParam(role="user", content="What is the weather in Tokyo?"),
-    BaseMessageParam(
-        role="agent 001", content="User asked about the weather in Tokyo."
-    ),
+from mirascope.core import BaseMessageParam, gemini, prompt_template
+
+# UPDATED
+history: list[gemini.GeminiMessageParam] = [
+    BaseMessageParam(role="user", content="Hello, AI"),
+    BaseMessageParam(role="assistant", content="Hello, user!"),
+    BaseMessageParam(role="user", content="What is the weather in Tokyo"),
 ]
+
+# INCORRECT (Gemini needs to have alternating user / assistant message chain, with an optional initial (pseudo) system message)
+#  history: list[BaseMessageParam | gemini.GeminiCallResponse] = [
+#      BaseMessageParam(role="user", content="Hello, AI!"),
+#      BaseMessageParam(role="agent 001", content="Hello, user!"),
+#      BaseMessageParam(role="user", content="What is the weather in Tokyo?"),
+#      BaseMessageParam(
+#          role="agent 001", content="User asked about the weather in Tokyo."
+#      ),
+#  ]
 
 
 def get_weather_in_tokyo(city: str) -> str:
@@ -26,17 +35,13 @@ def test(history): ...
 
 
 response = test(history)
-
-print(response.content)
-
 history.append(response.message_param)
 
-if response.tool:
-    tool_output = response.tool.call()
-    history.append(response.tool_message_params([(response.tool, tool_output)]))
-
-    print(history)
-
+if tool := response.tool:
+    # UPDATED
+    history += response.tool_message_params([(tool, tool.call())])
+    # INCORRECT (`tool_message_params` returns a list)
+    # history.append(response.tool_message_params([(response.tool, tool_output)]))
 
 new_response = test(history)
 print(new_response.content)

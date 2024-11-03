@@ -28,7 +28,7 @@ class BaseConversationSummary(BaseModel):
     MESSAGES: {history}
     
     USER:
-    Create a structured summary of the conversation above. The information should be compressed as much as possible.
+    Create a structured summary of the conversation above. The information should be compressed as much as possible. Avoid adding unnecessary details.
     """
 )
 def base_conversation_summary_prompt(history): ...

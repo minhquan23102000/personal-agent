@@ -772,7 +772,7 @@ wheels = [
 
 [[package]]
 name = "mirascope"
-version = "1.7.2"
+version = "1.7.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docstring-parser" },
@@ -780,9 +780,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/98/f0/65706e7845e5633f298d245cfcf9c03bb49770f3a14ed1efe412af75c06a/mirascope-1.7.2.tar.gz", hash = "sha256:ad1bf699d5c5053083d6b692fef33fc058e68cfa1cad671218ccb3a3e56db2e1", size = 1834578 }
+sdist = { url = "https://files.pythonhosted.org/packages/ae/17/f2d67cd1477f61dadb024002f4f2a2b86de3f01fc0a554ddad1308d6c5a3/mirascope-1.7.3.tar.gz", hash = "sha256:1131c779914583b8623d3d53092d4c6ff3b6a68bf45f4bab615c60ad3fc82d92", size = 1834568 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/86/9d/56336f51ff1139d4b672175d9caaeecf88f9ca7544e87aaed230143e6b47/mirascope-1.7.2-py3-none-any.whl", hash = "sha256:2cc7565a500f3cd37b5c3f09fb6bdc655314c551c5585e956478078fb5e03bd1", size = 248441 },
+    { url = "https://files.pythonhosted.org/packages/78/c8/ed966e059f549b63d50421525175f0bbeab37011bbb5e19614f12d1ecaa2/mirascope-1.7.3-py3-none-any.whl", hash = "sha256:5b9e9f3ab56cc0604931fc9de7569e240ce5829c3d65905a8d772a7b1f3bf8ac", size = 248443 },
 ]
 
 [package.optional-dependencies]

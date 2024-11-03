@@ -45,7 +45,7 @@ class BaseSelfReflection(BaseModel):
     )
 
     improved_prompt: str = Field(
-        description="Revise the system prompt to resolve identified issues. You can add, update, or remove parts of the system prompt. Do not add metedata, constants in the prompt. Just focus on the instructions you will note for your future self."
+        description="Revise the system prompt to resolve identified issues. You can add, update, or remove parts of the system prompt. Do not add metedata, constants in the prompt. Focus on the instructions you will note for your future self."
     )
 
 
@@ -64,8 +64,10 @@ class BaseSelfReflection(BaseModel):
     {system_prompt}
     </>
     
-    TASK:
-    Critique and thoughts about the conversation and your performance and your system prompt. Evaluating your performance in the conversation on a scale of 0-10. Identify strengths and successes, as well as areas for improvement. Specific examples from the conversation to illustrate your points. Finally, suggest an improved system prompt that addresses any identified issues. This is very important, as it updated your future behavior, personality, and decision making. So be very careful and thoughtful.
+    USER:
+    Critique and evaluate the current conversation and your performance on a scale of 0-10. Identify strengths, successes, and areas for improvement with specific examples. Suggest an improved system prompt to address any identified issues, ensuring clarity and relevance in your analysis. 
+    
+    This is very important, as it updated your future behavior, and decision making. So be very careful and thoughtful.
     """
 )
 def base_self_reflection_prompt(system_prompt, history, user_feedback): ...

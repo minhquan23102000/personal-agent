@@ -50,8 +50,10 @@ class BaseShortTermMemoryUpdate(BaseModel):
     {user_feedback}
     </>
     
-    TASK:
-    Review recent conversation history to identify key points, tasks, and preferences that should be retained for future interactions. Note any irrelevant or outdated information that can be removed. Create a concise list of important details to inform future behavior and decision-making, ensuring clarity and relevance. Think of it is as writting a note for your future self. This is very important, as it updated your future behavior, personality, and decision making. So be very careful and thoughtful.
+    USER:
+    Review the recent conversation history to extract and summarize key points that are essential for future interactions. Create a concise list highlighting these important details while identifying and eliminating any irrelevant or outdated information. Avoid adding unnecessary details. Focus on clarity and relevance to enhance future behavior and decision-making. Treat this as a note for your future self.
+    
+    This is very important, as it updated your future behavior, and decision making. So be very careful and thoughtful. 
     """
 )
 def short_term_memory_prompt(history, current_memory, user_feedback): ...
