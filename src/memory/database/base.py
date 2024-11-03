@@ -179,3 +179,29 @@ class BaseDatabase(ABC):
     ) -> List[ShortTermMemory]:
         """Search for similar short-term memories"""
         pass
+
+    @abstractmethod
+    async def get_recent_conversation_summaries(
+        self, limit: int = 5
+    ) -> List[ConversationSummary]:
+        """Get the most recent conversation summaries ordered by timestamp"""
+        pass
+
+    @abstractmethod
+    async def get_conversation_details(
+        self,
+        conversation_id: Optional[str] = None,
+        senders: Optional[List[str]] = None,
+        limit: int = 100,
+    ) -> List[ConversationMemory]:
+        """Retrieve conversation details filtered by conversation ID and senders
+
+        Args:
+            conversation_id: Optional conversation ID to filter by
+            senders: Optional list of senders to filter by
+            limit: Maximum number of messages to return
+
+        Returns:
+            List of conversation memory objects matching the filters
+        """
+        pass

@@ -1,12 +1,35 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 import inspect
 import datetime
 
 if TYPE_CHECKING:
     from src.agent.base_agent import BaseAgent
+    from src.memory.models import ConversationSummary
 
 
-def build_system_prompt(agent: "BaseAgent") -> str:
+def build_recent_conversation_context(summaries: List["ConversationSummary"]) -> str:
+    """Format conversation summaries into readable context"""
+    if not summaries:
+        return ""
+
+    conversation_context = "\n\n".join(
+        f"[{i+1}] Conversation {summary.conversation_id} at {summary.timestamp.strftime('%Y-%m-%d %H:%M:%S')}:\n"
+        f"    {summary.conversation_summary}"
+        for i, summary in enumerate(summaries)
+    )
+
+    return inspect.cleandoc(
+        f"""
+# RECENT CONVERSATIONS SUMMARIES:
+{conversation_context}
+        """
+    ).strip()
+
+
+def build_system_prompt(
+    agent: "BaseAgent", recent_conversations: List["ConversationSummary"]
+) -> str:
+    """Build system prompt with recent conversation context"""
 
     return inspect.cleandoc(
         f"""
@@ -15,7 +38,7 @@ CURRENT TIME: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 # SYSTEM INSTRUCTIONS:
 {agent.system_prompt}
-            """
+        """
     ).strip()
 
 

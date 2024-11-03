@@ -765,3 +765,76 @@ class SQLiteDatabase(BaseDatabase):
                 )
                 for row in rows
             ]
+
+    async def get_recent_conversation_summaries(
+        self, limit: int = 5
+    ) -> List[ConversationSummary]:
+        """Get the most recent conversation summaries ordered by timestamp"""
+        async with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT * FROM conversation_summary
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+
+            rows = cursor.fetchall()
+            return [
+                ConversationSummary(
+                    conversation_id=row[0],
+                    prompt=row[1],
+                    feedback_text=row[2],
+                    example=row[3],
+                    improvement_suggestion=row[4],
+                    improve_prompt=row[5],
+                    reward_score=row[6],
+                    conversation_summary=row[7],
+                    timestamp=datetime.fromisoformat(row[8]),
+                )
+                for row in rows
+            ]
+
+    async def get_conversation_details(
+        self,
+        conversation_id: Optional[str] = None,
+        senders: Optional[List[str]] = None,
+        limit: int = 100,
+    ) -> List[ConversationMemory]:
+        """Retrieve conversation details filtered by conversation ID and senders"""
+        async with self.get_connection() as conn:
+            query = """
+                SELECT conversation_id, turn_id, timestamp, sender, 
+                       message_content, message_type
+                FROM conversations
+                WHERE 1=1
+            """
+            params = []
+
+            if conversation_id:
+                query += " AND conversation_id = ?"
+                params.append(conversation_id)
+
+            if senders:
+                placeholders = ",".join("?" * len(senders))
+                query += f" AND sender IN ({placeholders})"
+                params.extend(senders)
+
+            query += " ORDER BY timestamp DESC LIMIT ?"
+            params.append(limit)
+
+            cursor = conn.execute(query, params)
+            rows = cursor.fetchall()
+
+            return [
+                ConversationMemory(
+                    conversation_id=row[0],
+                    turn_id=row[1],
+                    timestamp=datetime.fromisoformat(row[2]),
+                    sender=row[3],
+                    message_content=row[4],
+                    message_type=MessageType(row[5]),
+                )
+                for row in rows
+            ]

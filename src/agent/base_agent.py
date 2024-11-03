@@ -18,7 +18,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from mirascope.retries.tenacity import collect_errors
 from pydantic import ValidationError
 from src.memory.memory_manager import MemoryManager
-from src.memory.models import MessageType, ShortTermMemory
+from src.memory.models import ConversationSummary, MessageType, ShortTermMemory
 from src.memory.memory_toolkit.long_term import get_memory_toolkit
 from src.util.rotating_list import RotatingList
 import os
@@ -28,7 +28,11 @@ from src.core.prompt.tool_prompt import (
     get_list_tools_name,
 )
 from src.core.prompt.error_prompt import format_error_message
-from src.core.prompt.system import build_system_prompt, build_short_term_memory_prompt
+from src.core.prompt.system import (
+    build_system_prompt,
+    build_short_term_memory_prompt,
+    build_recent_conversation_context,
+)
 from src.core.prompt.tool_prompt import (
     build_prompt_from_list_tools,
     get_list_tools_name,
@@ -99,6 +103,9 @@ class BaseAgent:
     )
 
     interface: BaseInterface = field(default_factory=lambda: ConsoleInterface())
+
+    recent_conversations: List[ConversationSummary] = field(default_factory=list)
+    num_recent_conversations: int = 7
 
     def __post_init__(self) -> None:
         """Initialize the agent after dataclass initialization."""
@@ -171,6 +178,7 @@ class BaseAgent:
             )
             return
 
+        # Load latest summary for system prompt
         latest_summary = await self.memory_manager.get_latest_conversation_summary()
         if latest_summary:
             self.system_prompt = latest_summary.improve_prompt
@@ -178,6 +186,14 @@ class BaseAgent:
                 f"Loaded system prompt: {self.system_prompt}"
             )
 
+        # Load recent conversations for context
+        self.recent_conversations = (
+            await self.memory_manager.get_recent_conversation_summaries(
+                limit=self.num_recent_conversations
+            )
+        )
+
+        # Load short term memory
         self.context_memory = await self.memory_manager.get_short_term_memory()
 
         self.interface.print_system_message(
@@ -191,6 +207,8 @@ class BaseAgent:
         {system_prompt}
         
         {short_term_memory_prompt}
+        
+        {recent_conversation_context}
         
         # AVAILABLE TOOLS (REMEMBER TO USE THEM WHEN NECESSARY): 
         
@@ -210,9 +228,14 @@ class BaseAgent:
         include_system_prompt: bool = True,
         include_tools_prompt: bool = True,
         include_notes_prompt: bool = True,
+        include_recent_conversation_context: bool = True,
     ) -> BaseDynamicConfig:
         """Build the prompt for the agent using the current state."""
-        system_prompt = build_system_prompt(self) if include_system_prompt else ""
+        system_prompt = (
+            build_system_prompt(self, self.recent_conversations)
+            if include_system_prompt
+            else ""
+        )
         short_term_memory_prompt = (
             build_short_term_memory_prompt(self) if include_short_term_memory else ""
         )
@@ -230,6 +253,12 @@ class BaseAgent:
             else ""
         )
 
+        recent_conversation_context = (
+            build_recent_conversation_context(self.recent_conversations)
+            if include_recent_conversation_context
+            else ""
+        )
+
         return {
             "computed_fields": {
                 "system_prompt": system_prompt,
@@ -237,6 +266,7 @@ class BaseAgent:
                 "history": history,
                 "tools_prompt": tools_prompt,
                 "notes_prompt": notes_prompt,
+                "recent_conversation_context": recent_conversation_context,
             }
         }
 
@@ -245,7 +275,7 @@ class BaseAgent:
         await self.store_turn_message(message, "assistant")
 
     @litellm.call(model=default_model)
-    async def _default_call(
+    def _default_call(
         self, query: BaseMessageParam | None = None, include_tools: bool = True
     ) -> BaseDynamicConfig:
         """Default call to the agent with the current state and context history."""
@@ -329,7 +359,7 @@ class BaseAgent:
             self.interface.print_user_message(correct_action_query.content)
 
         # response call
-        response = await self._default_call(include_tools=include_tools)  # type: ignore
+        response = self._default_call(include_tools=include_tools)  # type: ignore
         self.interface.print_agent_message(response.content)
 
         # tool call
@@ -360,7 +390,7 @@ class BaseAgent:
             else:
                 use_tool_call, response = await self._default_step()
                 if use_tool_call:
-                    return self.step(Messages.User(""))
+                    return await self.step(Messages.User(""))
 
         except Exception as e:
             self.interface.print_system_message(
@@ -369,7 +399,7 @@ class BaseAgent:
             )
             return str(e)
 
-    async def update_config(self, config_str: str) -> None:
+    def update_config(self, config_str: str) -> None:
         """Update the agent's configuration."""
         parameters = config_str.split(" ")
         if len(parameters) == 2:
@@ -396,7 +426,7 @@ class BaseAgent:
 
                 while query.startswith(update_config_prefix):
                     query = query[len(update_config_prefix) :]
-                    await self.update_config(query)
+                    self.update_config(query)
 
                     query = self.interface.input("[User]: ")
 

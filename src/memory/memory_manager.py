@@ -504,3 +504,44 @@ class MemoryManager:
         except Exception as e:
             logger.error(f"Error retrieving latest conversation summary: {str(e)}")
             raise
+
+    async def get_recent_conversation_summaries(
+        self, limit: int = 5
+    ) -> List[ConversationSummary]:
+        """Retrieve the most recent conversation summaries ordered by timestamp
+
+        Args:
+            limit (int): Maximum number of summaries to return
+
+        Returns:
+            List[ConversationSummary]: List of recent conversation summaries
+        """
+        try:
+            return await self.db.get_recent_conversation_summaries(limit=limit)
+        except Exception as e:
+            logger.error(f"Error retrieving recent conversation summaries: {str(e)}")
+            raise
+
+    async def get_conversation_details(
+        self,
+        conversation_id: Optional[str] = None,
+        senders: Optional[List[str]] = None,
+        limit: int = 100,
+    ) -> List[ConversationMemory]:
+        """Retrieve conversation details filtered by conversation ID and senders
+
+        Args:
+            conversation_id: Optional conversation ID to filter by
+            senders: Optional list of senders to filter by
+            limit: Maximum number of messages to return
+
+        Returns:
+            List of conversation memory objects matching the filters
+        """
+        try:
+            return await self.db.get_conversation_details(
+                conversation_id=conversation_id, senders=senders, limit=limit
+            )
+        except Exception as e:
+            logger.error(f"Error retrieving conversation details: {str(e)}")
+            raise

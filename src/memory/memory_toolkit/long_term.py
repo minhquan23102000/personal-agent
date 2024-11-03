@@ -121,9 +121,6 @@ class LongtermMemoryToolKit(BaseToolKit):
         You can use this function in following scenarios:
         - When you need to recall how you handled similar conversations in the past
         - When you want to understand the context of similar situations
-        - When you need to maintain consistency in your responses across similar conversations
-        - When you want to learn from past interactions to improve current responses
-        - When you need to understand patterns in user behavior or conversation flow
 
         Use this when you do not have context in the current moment for a specific topic user asking or for task you are working on.
 
@@ -175,6 +172,58 @@ class LongtermMemoryToolKit(BaseToolKit):
                 f"Error searching conversation contexts: {e}. Traceback: {traceback.format_exc()}"
             )
             return f"Error searching conversation contexts: {str(e)}. Traceback: {traceback.format_exc()}"
+
+    @toolkit_tool
+    async def recall_conversation_details(self, conversation_id: str) -> str:
+        """Retrieve all messages between user and assistant for a specific conversation.
+
+        You can use this function in following scenarios:
+        - When you need to understand the full context of a past conversation
+        - When you need to reference specific details from a previous conversation
+        - When you need to analyze how a particular conversation evolved
+        - When you need to verify what was previously discussed or agreed upon
+
+        Args:
+            conversation_id (str): The unique identifier of the conversation to retrieve. This should be a valid conversation ID from the recent conversations context.
+        """
+        try:
+            if not self.memory_manager:
+                return "Error: Memory manager not available"
+
+            # Get conversation details for user and assistant only
+            conversation_messages = await self.memory_manager.get_conversation_details(
+                conversation_id=conversation_id,
+                senders=["user", "assistant"],
+                limit=50,  # Reasonable limit for conversation length
+            )
+
+            if not conversation_messages:
+                return f"No conversation found with ID: {conversation_id}."
+
+            # Format conversation in chronological order
+            messages = sorted(conversation_messages, key=lambda x: x.turn_id)
+
+            # Build formatted conversation string
+            conversation_lines = [
+                f"Conversation ID: {conversation_id}\n",
+                "Conversation History:",
+            ]
+
+            for msg in messages:
+                # Format timestamp to be more readable
+                timestamp = msg.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                role = "User" if msg.sender == "user" else "Assistant"
+                conversation_lines.append(
+                    f"\n[{timestamp}] {role}:\n{msg.message_content}"
+                )
+
+            return "\n".join(conversation_lines)
+
+        except Exception as e:
+            logger.error(
+                f"Error retrieving conversation details: {e}. Traceback: {traceback.format_exc()}"
+            )
+            return f"Error retrieving conversation details: {str(e)}"
 
 
 def get_memory_toolkit(memory_manager: "MemoryManager") -> LongtermMemoryToolKit:
