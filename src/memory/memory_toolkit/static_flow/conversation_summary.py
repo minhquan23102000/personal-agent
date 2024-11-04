@@ -1,6 +1,6 @@
 import inspect
 from pydantic import BaseModel, Field
-from mirascope.core import prompt_template, Messages, gemini
+from mirascope.core import prompt_template, Messages, gemini, litellm
 from typing import List, TYPE_CHECKING
 from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -49,7 +49,7 @@ async def generate_conversation_summary(agent: "BaseAgent") -> BaseConversationS
         wait=wait_exponential(multiplier=1, min=4, max=60),
         after=collect_errors(ValidationError),
     )
-    @gemini.call(
+    @litellm.call(
         model=agent.default_model,
         response_model=BaseConversationSummary,
         json_mode=True,

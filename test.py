@@ -25,7 +25,7 @@ def get_weather_in_tokyo(city: str) -> str:
     return f"The weather in {city} is 20 degrees Celsius."
 
 
-@gemini.call(model="gemini-1.5-flash-002", tools=[get_weather_in_tokyo])
+@litellm.call(model="gemini-1.5-flash-002", tools=[get_weather_in_tokyo])
 @prompt_template(
     """
     MESSAGES: {history}
@@ -39,12 +39,17 @@ history.append(response.message_param)
 
 if tool := response.tool:
     # UPDATED
-    history += response.tool_message_params([(tool, tool.call())])
+    tool_response = response.tool_message_params([(tool, tool.call())])
+    history += tool_response
     # INCORRECT (`tool_message_params` returns a list)
     # history.append(response.tool_message_params([(response.tool, tool_output)]))
+
 
 new_response = test(history)
 print(new_response.content)
 history.append(new_response.message_param)
 
 print(history)
+
+print(tool_response)
+print(tool_response.content)

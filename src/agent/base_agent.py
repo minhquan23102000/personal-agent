@@ -78,8 +78,8 @@ def generate_agent_id() -> str:
 class BaseAgent:
     """Base class for all agents with memory integration."""
 
-    default_model: str = "gemini-1.5-flash-002"
-    reflection_model: str = "gemini-1.5-pro-002"
+    default_model: str = "gemini/gemini-1.5-flash-002"
+    reflection_model: str = "gemini/gemini-1.5-pro-002"
 
     agent_id: str = field(default_factory=generate_agent_id)
     system_prompt: str = "You are an AI agent."
@@ -277,7 +277,7 @@ class BaseAgent:
         self.history.append(message)
         await self.store_turn_message(message, "assistant")
 
-    @gemini.call(model=default_model)
+    @litellm.call(model=default_model)
     def _default_call(
         self, query: BaseMessageParam | None = None, include_tools: bool = True
     ) -> BaseDynamicConfig:
@@ -359,23 +359,23 @@ class BaseAgent:
                 """
                 )
             )
-            # self.history.append(correct_action_query)
+            self.history.append(correct_action_query)
             self.interface.print_user_message(correct_action_query.content)
 
         # response call
-        response = self._default_call(query=correct_action_query, include_tools=include_tools)  # type: ignore
+        response = self._default_call(include_tools=include_tools)  # type: ignore
         self.interface.print_agent_message(response.content)
+        # store agent response to history
+        await self._assitant_turn_message(response.message_param)  # type: ignore
 
         # tool call
         if response.tools:
-            tool_output_messages = await self._process_tools(response.tools, response)
+            tool_output_messages = await self._process_tools(
+                response.tools, response
+            )  # type: ignore
             # store message to history before tool, make sure the tool call is successful before add to history
-            await self._assitant_turn_message(response.message_param)
             self.history.extend(tool_output_messages)  # type: ignore
             use_tool_call = True
-        else:
-            # store message to history directly
-            await self._assitant_turn_message(response.message_param)
 
         return use_tool_call, response
 
@@ -385,6 +385,7 @@ class BaseAgent:
     ):
         """Execute one step of the agent's reasoning process."""
         try:
+
             await self.store_turn_message(query, "user")
             self.history.append(query)
 
@@ -466,22 +467,29 @@ class BaseAgent:
         role: str,
     ) -> BaseMessageParam:
 
-        if isinstance(message, BaseMessageParam):
-            return message
+        # if isinstance(message, BaseMessageParam):
+        #     return message
 
-        if isinstance(message, dict):
-            if role.lower() != "tool":
-                return BaseMessageParam(
-                    role=role,
-                    content=str(message["content"]),
-                )
-            else:
-                return BaseMessageParam(
-                    role=role,
-                    content=str(message["tool_calls"]),
-                )
+        # if isinstance(message, dict):
+        #     if role.lower() != "tool":
+        #         return BaseMessageParam(
+        #             role=role,
+        #             content=str(message["content"]),
+        #         )
+        #     else:
+        #         return BaseMessageParam(
+        #             role=role,
+        #             content=str(message["tool_calls"]),
+        #         )
 
-        return BaseMessageParam(role=role, content=str(message))
+        content = getattr(message, "content", None)
+        if content is None:
+            content = getattr(message, "parts", None)
+
+        if content is None:
+            content = str(message)
+
+        return BaseMessageParam(role=role, content=str(content))
 
     async def store_turn_message(
         self,
@@ -516,9 +524,10 @@ class BaseAgent:
 
             for msg in messages:
                 try:
+                    msg = self.norm_message_type(msg, "tool")
                     await self.memory_manager.store_conversation(
-                        sender="Tool",
-                        message_content=f"{msg['name']}: {msg['content']}",
+                        sender="tool",
+                        message_content=str(msg.content),
                         message_type=MessageType.TOOL,
                         conversation_id=self.conversation_id,
                     )

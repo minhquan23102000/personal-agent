@@ -1,7 +1,7 @@
 import traceback
 from typing import List
 from pydantic import BaseModel, Field
-from mirascope.core import prompt_template, gemini
+from mirascope.core import prompt_template, gemini, litellm
 from tenacity import retry, stop_after_attempt, wait_exponential
 from mirascope.retries.tenacity import collect_errors
 from pydantic import ValidationError
@@ -61,7 +61,7 @@ async def save_long_term_memory(agent: "BaseAgent") -> None:
             wait=wait_exponential(multiplier=1, min=4, max=60),
             after=collect_errors(ValidationError),
         )
-        @gemini.call(
+        @litellm.call(
             model=agent.default_model,
             response_model=BaseLongTermMemory,
             json_mode=True,

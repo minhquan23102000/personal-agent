@@ -29,14 +29,14 @@ SYSTEM_PROMPT_PATH = Path(__file__).parent / "inital_system_prompt.md"
 
 
 @dataclass
-class Delta3000(BaseAgent):
+class DebugAgent(BaseAgent):
     """An agent that helps users find and recommend books."""
 
     system_prompt: str = SYSTEM_PROMPT_PATH.read_text()
-    default_model: str = "gemini-1.5-flash-002"
-    reflection_model: str = "gemini-1.5-pro-002"
-    agent_id: str = "Delta 3000"
+    default_model: str = "gemini/gemini-1.5-flash-002"
+    reflection_model: str = "gemini/gemini-1.5-pro-002"
     api_key_env_var: str = "GEMINI_API_KEY"
+    agent_id: str = "Debug Agent 1777"
     api_keys: list[str] = field(default_factory=lambda: GOOGLE_API_KEY_LIST)
 
     def __post_init__(self):
@@ -58,5 +58,5 @@ class Delta3000(BaseAgent):
 
 if __name__ == "__main__":
 
-    agent = Delta3000()
+    agent = DebugAgent()
     asyncio.run(agent.run())

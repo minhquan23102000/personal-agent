@@ -7,6 +7,7 @@ from mirascope.core import (
     prompt_template,
     BaseMessageParam,
     gemini,
+    litellm,
     BaseDynamicConfig,
     Messages,
 )
@@ -85,7 +86,7 @@ async def perform_self_reflection(
             wait=wait_exponential(multiplier=1, min=4, max=60),
             after=collect_errors(ValidationError),
         )
-        @gemini.call(
+        @litellm.call(
             model=agent.reflection_model,
             response_model=BaseSelfReflection,
             json_mode=True,
