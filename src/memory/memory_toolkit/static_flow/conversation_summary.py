@@ -50,7 +50,7 @@ async def generate_conversation_summary(agent: "BaseAgent") -> BaseConversationS
         after=collect_errors(ValidationError),
     )
     @litellm.call(
-        model=agent.default_model,
+        model=agent.reflection_model,
         response_model=BaseConversationSummary,
         json_mode=True,
     )

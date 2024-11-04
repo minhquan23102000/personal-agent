@@ -151,7 +151,9 @@ class BaseAgent:
 
     def _initialize_note_taking_toolkit(self) -> None:
         """Initialize the note taking toolkit."""
-        self.note_taking_toolkit.notes = load_notes(self.agent_id)
+        # self.note_taking_toolkit.notes = load_notes(self.agent_id)
+        # turn off load notes
+        return
 
     def rotate_api_key(self) -> None:
         """Rotate the api key."""
@@ -218,6 +220,12 @@ class BaseAgent:
         {tools_prompt}
         
         # AGENT'S NOTES (IMPORTANT INFORMATION, KNOWLEDGES, IDEAS, PLANS, ETC. IN THE CURRENT CONTEXT):
+        
+        ## NOTE USAGE GUIDLINES
+        
+        * Maintain organized and up-to-date notes by regularly updating them with relevant and concise information. Use clear titles for each topic and ensure the content focuses on important facts, ideas, and plans while avoiding unnecessary details.
+        
+        ## NOTES CONTENT
         
         {notes_prompt}
         
@@ -485,6 +493,9 @@ class BaseAgent:
         content = getattr(message, "content", None)
         if content is None:
             content = getattr(message, "parts", None)
+
+        if content is None and isinstance(message, dict):
+            content = message.get("content", None)
 
         if content is None:
             content = str(message)

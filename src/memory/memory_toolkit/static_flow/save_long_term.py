@@ -62,7 +62,7 @@ async def save_long_term_memory(agent: "BaseAgent") -> None:
             after=collect_errors(ValidationError),
         )
         @litellm.call(
-            model=agent.default_model,
+            model=agent.reflection_model,
             response_model=BaseLongTermMemory,
             json_mode=True,
         )

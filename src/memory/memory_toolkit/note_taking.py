@@ -61,9 +61,7 @@ class NoteTakingToolkit(BaseToolKit):
     @toolkit_tool
     async def add_note(self, topic: str, paragraphs: List[str]) -> str:
         """Add a new note with the given topic and paragraphs. Use this tool to save important information, knowledge, facts, ideas, plans, etc.
-        The topic should be a short and concise title.
-        Ensure the content of note is relevant, descriptive, clear, concise and avoids unnecessary details. Do not spam ineffective information to notes.
-        Ensure all important information, knowledge, facts, ideas, plans, etc. are noted.
+
 
 
         Args:

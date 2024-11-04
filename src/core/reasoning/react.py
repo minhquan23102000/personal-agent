@@ -41,7 +41,7 @@ class ReasoningAction(pydantic.BaseModel):
         description="Talk to user in this action? True if you do.",
     )
     action: str = pydantic.Field(
-        description="Determine the most significant action you can take immediately based on your current thoughts and feelings. Identify any tools or resources required for this action. Include only one action at a time to ensure clarity and effectiveness. Do not add plan here."
+        description="Determine the most significant action you can take immediately based on your current thoughts and feelings. Identify any tools or resources required for this action. Keep it clear and clean, concise and short. Do not add plan here."
     )
     talk_to_user_flag_2: bool = pydantic.Field(
         description="Talk to user in this action? True if you do.",
@@ -57,7 +57,7 @@ class ReactEngine:
 
     model_name: str = "gemini/gemini-1.5-flash-002"
     max_retries: int = 3
-    max_deep: int = 3
+    max_deep: int = 5
 
     def format_reasoning_response(
         self, agent: "BaseAgent", response: ReasoningAction
@@ -114,7 +114,7 @@ class ReactEngine:
         reasoning_response: ReasoningAction,
     ) -> dict:
         """Execute the action."""
-        msg = f"Auto message: Ensure you remain adaptable in carrying out your action plan, allowing for adjustments based on changing circumstances or requirements - '{reasoning_response.action}'"
+        msg = f"System auto message reminder. Execute your action plan: <{reasoning_response.action}>"
         agent.history.append(Messages.User(msg))
         agent.interface.print_user_message(msg)
         use_tool_call, response = await agent._default_step()
@@ -157,10 +157,10 @@ class ReactEngine:
             i += 1
 
         # if agent use tool call, continue to step for agent handle tool output
-        logger.debug(f"action_result: {action_result}")
+
         use_tool_call = action_result["use_tool_call"]
         while use_tool_call and i < self.max_deep + 3:
-            # append empty message to history
+            logger.debug(f"After react, agent use_tool_call: {use_tool_call}")
 
             # tool call step
             use_tool_call, response = await agent._default_step()
