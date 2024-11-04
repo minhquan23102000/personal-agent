@@ -144,6 +144,13 @@ class NoteTakingToolkit(BaseToolKit):
         logger.debug(format_notes(self.notes))
         return f"Successfully deleted paragraphs {line_numbers} from note: {topic}"
 
+    # @toolkit_tool
+    # async def clean_notes(self) -> str:
+    #     """Clean all notes. Use this to reset your notes. Be very careful with this tool as it will remove all your notes."""
+    #     self.notes = {}
+    #     logger.debug(format_notes(self.notes))
+    #     return "Successfully cleaned all notes"
+
 
 async def main():
     note_taking_toolkit = NoteTakingToolkit()

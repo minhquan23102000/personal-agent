@@ -18,7 +18,7 @@ class BaseShortTermMemoryUpdate(BaseModel):
     """Model for short-term memory updates."""
 
     user_info: str = Field(
-        description="Provide a comprehensive overview of the user's preferences, personality traits, background, needs, styles, habits, beliefs, and our relationship, ensuring all relevant details are included for a better understanding of the user."
+        description="Provide a comprehensive overview of the user's preferences, personality traits, background, needs, styles, habits, beliefs, and our relationship, ensuring all relevant details are included for a better understanding of the user. Be descriptive at this field."
     )
     how_to_address_user: str = Field(
         description="How you address the user? Give a concise and short note. Keep language simple and direct."
@@ -30,7 +30,7 @@ class BaseShortTermMemoryUpdate(BaseModel):
         description="Create a bullet-point list that reflects how your beliefs and understanding of the world have evolved based on insights gained from our conversation."
     )
     agent_info: str = Field(
-        description="Reflect on how this conversation has influenced your personality and characteristics. Update your profile to include changes in your name, gender, language, style, age, role, personality, identity, historical background and anything important about you based on the discussion."
+        description="Reflect on how the conversation's impact on your personality and characteristics. Update your profile to reflect any changes in name, gender, language, style, age, role, personality, identity, historical background, and other relevant aspects based on this discussion. Be descriptive at this field."
     )
     recent_goal_and_status: str = Field(
         description="Document the all the goals the user has set and their progress or status. Should be a list of bullet points in short and concise. If goal is completed, remove it from the list."
@@ -50,10 +50,16 @@ class BaseShortTermMemoryUpdate(BaseModel):
     {user_feedback}
     </>
     
-    USER:
-    Review the recent conversation history to extract and summarize key points that are essential for future interactions. Create a concise list highlighting these important details while identifying and eliminating any irrelevant or outdated information. Avoid adding unnecessary details. Focus on clarity and relevance to enhance future behavior and decision-making. Treat this as a note for your future self.
+    UPDATE TO CURRENT CONTEXT MEMORY:
+    <>
+    {current_memory}
+    </>
     
-    This is very important, as it updated your future behavior, and decision making. So be very careful and thoughtful. 
+    USER:
+    Review the recent conversation history to extract key points and rewrite the context memory for future interactions. Create a concise list that highlights essential details, ensuring clarity and relevance while eliminating any outdated or irrelevant information. Focus on summarizing important insights that will inform future behavior and decision-making. Remember to consider the agent notes for additional context that may enhance the understanding of these key points. Prioritize accuracy and thoughtfulness in this update to effectively guide future actions.
+    
+    Rewrite the context memory by incorporating updated information while preserving essential background details that contribute to understanding the overall narrative.
+
     """
 )
 def short_term_memory_prompt(history, current_memory, user_feedback): ...

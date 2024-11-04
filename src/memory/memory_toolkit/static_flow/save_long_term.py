@@ -121,7 +121,7 @@ async def store_update_knowledge(
         entities_relationship (List[str]): A list of concise and very short relationship between the entities, formatted as "entity1" "relationship" "entity2". Focus on the relationship between the entities, not the facts or knowledges.
     """
 
-    duplicate_threshold = 0.95
+    duplicate_threshold = 0.93
     try:
 
         new_relationships = []

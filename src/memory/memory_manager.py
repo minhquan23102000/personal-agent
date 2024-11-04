@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from loguru import logger
 
+from mirascope.core import Messages
+
 from src.memory.models import (
     ConversationMemory,
     Knowledge,
@@ -545,3 +547,51 @@ class MemoryManager:
         except Exception as e:
             logger.error(f"Error retrieving conversation details: {str(e)}")
             raise
+
+    async def check_and_perform_reflection(self) -> bool:
+        """Check if reflection needs to be performed for previous conversation and do it if needed"""
+        try:
+            # Get latest conversation details
+            latest_conversations = await self.get_conversation_details(limit=1)
+            if not latest_conversations:
+                return False
+
+            latest_conv = latest_conversations[0]
+
+            # Check if reflection exists for this conversation
+            has_reflection = await self.db.has_reflection(latest_conv.conversation_id)
+            if has_reflection:
+                return False
+
+            user_wants_reflection = input(
+                "The last conversation has not been reflected. Do you want to perform reflection? (y/n): "
+            )
+            if user_wants_reflection.lower() != "y":
+                return False
+
+            # Load conversation history
+            conv_history = await self.get_conversation_details(
+                conversation_id=latest_conv.conversation_id, limit=200
+            )
+
+            # Temporarily store in agent history
+            self.agent.history = [
+                (
+                    Messages.User(msg.message_content)
+                    if msg.sender == "user"
+                    else Messages.Assistant(msg.message_content)
+                )
+                for msg in conv_history
+            ]
+
+            # Perform reflection
+            await self.reflection_conversation()
+
+            # Clear history after reflection
+            self.agent.history = []
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error checking/performing reflection: {e}")
+            raise e

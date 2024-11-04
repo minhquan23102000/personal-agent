@@ -205,3 +205,8 @@ class BaseDatabase(ABC):
             List of conversation memory objects matching the filters
         """
         pass
+
+    @abstractmethod
+    async def has_reflection(self, conversation_id: str) -> bool:
+        """Check if reflection exists for conversation"""
+        pass

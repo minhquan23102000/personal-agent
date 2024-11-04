@@ -43,19 +43,17 @@ async def reflection_conversation(
     try:
 
         # 1. Generate conversation summary and reflection
+
         summary_response = await generate_conversation_summary(memory_manager.agent)
         summary_str = format_summary(summary_response)
-        memory_manager.agent.rotate_api_key()
 
         # 2. Save important information to long-term memory
         await save_long_term_memory(memory_manager.agent)
-        memory_manager.agent.rotate_api_key()
 
         # 3. Perform self reflection
         reflection_response = await perform_self_reflection(
             memory_manager.agent, user_feedback
         )
-        memory_manager.agent.rotate_api_key()
 
         print(f"Summary: {summary_str}\n\n")
         print(f"Reflection: {reflection_response}\n\n")

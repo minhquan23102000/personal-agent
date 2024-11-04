@@ -151,7 +151,7 @@ class BaseAgent:
 
     def _initialize_note_taking_toolkit(self) -> None:
         """Initialize the note taking toolkit."""
-        # self.note_taking_toolkit.notes = load_notes(self.agent_id)
+        self.note_taking_toolkit.notes = load_notes(self.agent_id)
         # turn off load notes
         return
 
@@ -182,6 +182,10 @@ class BaseAgent:
                 "No memory manager available - using default initialization"
             )
             return
+
+        # Check and perform reflection if needed
+        reflection_performed = await self.memory_manager.check_and_perform_reflection()
+        self.conversation_id = str(uuid.uuid4())
 
         # Load latest summary for system prompt
         latest_summary = await self.memory_manager.get_latest_conversation_summary()
@@ -362,7 +366,7 @@ class BaseAgent:
                     f"""
                 !! This is an remind auto message !! 
                 There are some error in the last step when indicate that you pass the wrong parameters when use tool. 
-                Error: <> {format_error_message([errors[-1]])} </>."
+                Error: <> {format_error_message(errors)} </>."
                 Correct the parameters indicated in the error message and re-execute the action immediately without further discussion.
                 """
                 )

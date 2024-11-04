@@ -41,8 +41,7 @@ class Delta3000(BaseAgent):
     def __post_init__(self):
         self.memory_manager = MemoryManager(db_uri=self.agent_id)
         self.reasoning_engine = ReactEngine(
-            max_retries=self.max_retries,
-            model_name=self.reflection_model,
+            max_retries=self.max_retries, model_name=self.reflection_model, max_deep=10
         )
         super().__post_init__()
         self.add_tools(

@@ -771,9 +771,11 @@ class SQLiteDatabase(BaseDatabase):
                     agent_info=row[6],
                     environment_info=row[7],
                     how_to_address_user=row[8],
-                    timestamp=datetime.fromisoformat(row[9])
-                    if isinstance(row[9], str)
-                    else row[9],
+                    timestamp=(
+                        datetime.fromisoformat(row[9])
+                        if isinstance(row[9], str)
+                        else row[9]
+                    ),
                 )
                 for row in rows
             ]
@@ -850,3 +852,16 @@ class SQLiteDatabase(BaseDatabase):
                 )
                 for row in rows
             ]
+
+    async def has_reflection(self, conversation_id: str) -> bool:
+        """Check if reflection exists for conversation"""
+        async with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT COUNT(*) FROM conversation_summary 
+                WHERE conversation_id = ?
+                """,
+                (conversation_id,),
+            )
+            count = cursor.fetchone()[0]
+            return count > 0
