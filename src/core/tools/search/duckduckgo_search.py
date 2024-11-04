@@ -73,7 +73,7 @@ class DuckDuckGoSearchTool(BaseTool):
                     keywords=self.query,
                     region="wt-wt",
                     # safesearch=self.safesearch,
-                    max_results=7,
+                    max_results=5,
                 )
 
                 search_results = []
