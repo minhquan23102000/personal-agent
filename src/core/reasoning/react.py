@@ -49,6 +49,9 @@ class ReasoningAction(pydantic.BaseModel):
     get_stuck: bool = pydantic.Field(
         description="True if you get stuck and can't complete the action or goal.",
     )
+    wait_for_user: bool = pydantic.Field(
+        description="True if you need to wait for another instruction or action from user.",
+    )
 
 
 @dataclass
@@ -126,6 +129,7 @@ class ReactEngine:
             or reasoning_response.talk_to_user_flag_2
             or reasoning_response.got_final_answer
             or reasoning_response.get_stuck
+            or reasoning_response.wait_for_user
         ):
             return {"break": True, "response": response, "use_tool_call": use_tool_call}
 

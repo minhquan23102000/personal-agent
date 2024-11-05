@@ -37,7 +37,7 @@ class BaseLongTermMemory(BaseModel):
     
     Format each knowledge item as a separate, clear statement.
     Format relationships as short and concise "entity1 relationship entity2" statements.
-    Do not include temporary information or contextual information for long-term memory. Prioritize knowledges and facts.
+    Do not include temporary information or contextual information for long-term memory. 
     
     !! Important: Capture all essential information in this single interaction. Because you will only have one chance to store the information.
     """

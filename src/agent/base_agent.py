@@ -187,6 +187,9 @@ class BaseAgent:
         reflection_performed = await self.memory_manager.check_and_perform_reflection()
         self.conversation_id = str(uuid.uuid4())
 
+        # turn off notes after reflection
+        self.note_taking_toolkit.notes = {}
+
         # Load latest summary for system prompt
         latest_summary = await self.memory_manager.get_latest_conversation_summary()
         if latest_summary:
@@ -373,6 +376,7 @@ class BaseAgent:
             )
             self.history.append(correct_action_query)
             self.interface.print_user_message(correct_action_query.content)
+            await self.store_turn_message(correct_action_query, "user")
 
         # response call
         response = self._default_call(include_tools=include_tools)  # type: ignore

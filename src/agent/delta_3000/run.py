@@ -22,6 +22,7 @@ from src.core.tools.search import (
     DuckDuckGoSearchTool,
     WebReaderTool,
 )
+from src.core.tools.files.file_manager_toolkit import FileManagerToolkit
 from src.core.reasoning.react import ReactEngine
 
 SYSTEM_PROMPT_PATH = Path(__file__).parent / "inital_system_prompt.md"
@@ -52,6 +53,7 @@ class Delta3000(BaseAgent):
                 WikipediaSearchContentTool,
             ]
         )
+        self.add_tools(FileManagerToolkit().create_tools())
 
 
 if __name__ == "__main__":
