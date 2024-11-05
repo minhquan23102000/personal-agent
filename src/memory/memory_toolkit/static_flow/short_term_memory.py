@@ -30,7 +30,7 @@ class BaseShortTermMemoryUpdate(BaseModel):
         description="Create a bullet-point list that reflects how your beliefs and understanding of the world have evolved based on insights gained from our conversation."
     )
     agent_info: str = Field(
-        description="Reflect on how the conversation's impact on your personality and characteristics. Update your profile to reflect any changes in name, gender, language, style, age, role, personality, identity, historical background, and other relevant aspects based on this discussion. Be descriptive at this field."
+        description="Reflect on how the conversation's impact on your personality and characteristics. Update your profile to reflect any changes in name, gender, language, style, age, role, personality, identity, historical background, and other relevant aspects based on this discussion. Make sure the content is descriptive and detailed, do not truncate any information."
     )
     recent_goal_and_status: str = Field(
         description="Document the all the goals the user has set and their progress or status. Should be a list of bullet points in short and concise. If goal is completed, remove it from the list."

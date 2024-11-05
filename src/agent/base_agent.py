@@ -78,8 +78,8 @@ def generate_agent_id() -> str:
 class BaseAgent:
     """Base class for all agents with memory integration."""
 
-    default_model: str = "gemini/gemini-1.5-flash-002"
-    reflection_model: str = "gemini/gemini-1.5-pro-002"
+    default_model: str = "gemini/gemini-1.5-flash-8b"
+    reflection_model: str = "gemini/gemini-1.5-flash-002"
 
     agent_id: str = field(default_factory=generate_agent_id)
     system_prompt: str = "You are an AI agent."
@@ -215,10 +215,16 @@ class BaseAgent:
     @prompt_template(
         """
         SYSTEM: 
-    
+        
+        # SYSTEM INSTRUCTIONS
+        
         {system_prompt}
         
+        # CONTEXT MEMORY (IMPORTANT INFORMATION AND CONTEXT FOR THE AGENT)
+        
         {short_term_memory_prompt}
+        
+        # RECENT CONVERSATION SUMMARY
         
         {recent_conversation_context}
         
@@ -226,11 +232,13 @@ class BaseAgent:
         
         {tools_prompt}
         
-        # AGENT'S NOTES (IMPORTANT INFORMATION, KNOWLEDGES, IDEAS, PLANS, ETC. IN THE CURRENT CONTEXT):
+        # AGENT'S NOTES (IMPORTANT INFORMATION, KNOWLEDGES, IDEAS, PLANS, ETC.):
         
         ## NOTE USAGE GUIDLINES
         
         * Maintain organized and up-to-date notes by regularly updating them with relevant and concise information. Use clear titles for each topic and ensure the content focuses on important facts, ideas, and plans while avoiding unnecessary details.
+        * The note content is for the agent's own use, not for the user. So do not mistake the user can view the note content.
+        * The note is persistent in this conversation, after the conversation ends, the note will be cleaned. 
         
         ## NOTES CONTENT
         

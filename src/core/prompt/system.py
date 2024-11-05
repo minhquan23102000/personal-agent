@@ -20,7 +20,6 @@ def build_recent_conversation_context(summaries: List["ConversationSummary"]) ->
 
     return inspect.cleandoc(
         f"""
-## RECENT CONVERSATIONS SUMMARIES:
 {conversation_context}
         """
     ).strip()
@@ -31,22 +30,16 @@ def build_system_prompt(
 ) -> str:
     """Build system prompt with recent conversation context"""
 
-    return inspect.cleandoc(
-        f"""
-# AGENT ID: {agent.agent_id}
-CURRENT TIME: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-
-# SYSTEM INSTRUCTIONS:
-{agent.system_prompt}
-        """
-    ).strip()
+    return agent.system_prompt
 
 
 def build_short_term_memory_prompt(agent: "BaseAgent") -> str:
     if agent.context_memory:
         return inspect.cleandoc(
             f"""
-# CONTEXT MEMORY (VERY IMPORTANT INFORMATION AND CONTEXT FOR THE AGENT)
+## CURRENT TIME: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+## AGENT ID: {agent.agent_id}
 
 ## AGENT INFORMATION & IDENTITY: 
 {agent.context_memory.agent_info}

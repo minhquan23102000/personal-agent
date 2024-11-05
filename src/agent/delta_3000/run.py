@@ -49,7 +49,6 @@ class Delta3000(BaseAgent):
             [
                 DuckDuckGoSearchTool,
                 WebReaderTool,
-                WikipediaSearchRelatedArticleTool,
                 WikipediaSearchContentTool,
             ]
         )
