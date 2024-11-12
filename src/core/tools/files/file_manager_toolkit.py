@@ -48,7 +48,7 @@ class FileManagerToolkit(BaseToolKit):
 
     __namespace__ = "file_system"
 
-    tree_command: str = "ltree"
+    tree_command: str = "C:/cygwin64/bin/tree.exe"
     doc_converter: DocumentConverter = DocumentConverter(
         allowed_formats=[
             InputFormat.PDF,
@@ -107,37 +107,33 @@ class FileManagerToolkit(BaseToolKit):
 
     @toolkit_tool
     def list_directory(self, dir_path: str) -> str:
-        """List contents of a directory using the tree command.
-
-        Args:
-            dir_path: Relative path to the directory to list. "." is the current directory
-
-        Returns:
-            String representation of the directory tree
-        """
+        """List contents of a directory in a tree format, ignoring files specified in .gitignore and the .git folder."""
         full_path = Path(dir_path)
-        try:
-            # Run tree command and capture output
-            result = subprocess.run(
-                [self.tree_command, str(full_path)],
-                capture_output=True,
-                text=True,
-                check=True,
+        gitignore_parser = GitignoreParser()
+        gitignore_parser.load_gitignore(full_path)
+
+        def build_tree(path: Path, prefix: str = "") -> str:
+            """Recursively build a tree structure as a string."""
+            if path.name == ".git":
+                return ""  # Skip the .git directory
+
+            tree_str = (
+                f"{prefix}{path.name}/\n" if path.is_dir() else f"{prefix}{path.name}\n"
             )
-            return result.stdout if result.stdout else "Empty directory"
-        except subprocess.CalledProcessError:
-            # Fallback to simple directory listing if tree command fails
-            try:
-                files = list(full_path.rglob("*"))
-                return (
-                    "\n".join(str(f.relative_to(full_path)) for f in sorted(files))
-                    if files
-                    else "Empty directory"
-                )
-            except Exception as e:
-                return f"Error listing directory: {str(e)}"
-        except FileNotFoundError:
-            return "Error: 'tree' command not found. Please install tree package."
+            if path.is_dir():
+                children = [
+                    build_tree(child, prefix + "    ")
+                    for child in sorted(path.iterdir())
+                    if not gitignore_parser.is_ignored(child, full_path)
+                ]
+                tree_str += "".join(children)
+            return tree_str
+
+        try:
+            tree_structure = build_tree(full_path)
+            return tree_structure if tree_structure else "Empty directory"
+        except Exception as e:
+            return f"Error listing directory: {str(e)}"
 
     @toolkit_tool
     def create_directory(self, dir_path: str) -> str:
@@ -155,27 +151,6 @@ class FileManagerToolkit(BaseToolKit):
             return f"Successfully created directory: {dir_path}"
         except Exception as e:
             return f"Error creating directory: {str(e)}"
-
-    # @toolkit_tool
-    # def save_image(self, file_path: str, image_data: bytes, format: str = "PNG") -> str:
-    #     """Save image data to a file.
-
-    #     Args:
-    #         file_path: Relative path for the image file
-    #         image_data: Raw image data in bytes
-    #         format: Image format (e.g., "PNG", "JPEG")
-
-    #     Returns:
-    #         Success message or error description
-    #     """
-    #     full_path =  file_path
-    #     try:
-    #         full_path.parent.mkdir(parents=True, exist_ok=True)
-    #         image = Image.open(image_data)
-    #         image.save(full_path, format=format)
-    #         return f"Successfully saved image to {file_path}"
-    #     except Exception as e:
-    #         return f"Error saving image: {str(e)}"
 
     def read_image(self, file_path: str) -> Image.Image | str:
         """Read an Image file

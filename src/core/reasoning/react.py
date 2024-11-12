@@ -117,7 +117,7 @@ class ReactEngine:
         reasoning_response: ReasoningAction,
     ) -> dict:
         """Execute the action."""
-        msg = f"System auto message reminder. Execute your action plan: <{reasoning_response.action}>"
+        msg = f"system@noreply: INFO: Execute your action plan: <{reasoning_response.action}>"
         agent.history.append(Messages.User(msg))
         agent.interface.print_user_message(msg)
         use_tool_call, response = await agent._default_step()

@@ -78,7 +78,7 @@ def generate_agent_id() -> str:
 class BaseAgent:
     """Base class for all agents with memory integration."""
 
-    default_model: str = "gemini/gemini-1.5-flash-8b"
+    default_model: str = "gemini/gemini-1.5-flash-002"
     reflection_model: str = "gemini/gemini-1.5-flash-002"
 
     agent_id: str = field(default_factory=generate_agent_id)
@@ -375,7 +375,7 @@ class BaseAgent:
             correct_action_query = Messages.User(
                 inspect.cleandoc(
                     f"""
-                !! This is an remind auto message !! 
+                system@noreply: ERROR:
                 There are some error in the last step when indicate that you pass the wrong parameters when use tool. 
                 Error: <> {format_error_message(errors)} </>."
                 Correct the parameters indicated in the error message and re-execute the action immediately without further discussion.
@@ -474,7 +474,7 @@ class BaseAgent:
             self.interface.print_history(self.history)
 
             if self.memory_manager:
-                if len(self.history) >= 4:
+                if len(self.history) >= 6:
                     # save notes
                     save_notes(self.agent_id, self.note_taking_toolkit.notes)
 
