@@ -15,7 +15,7 @@ from src.memory.models import (
     EntityRelationship,
     ConversationSummary,
     MessageType,
-    ShortTermMemory,
+    ContextMemory,
 )
 import re
 from src.config import DATA_DIR
@@ -587,7 +587,7 @@ class SQLiteDatabase(BaseDatabase):
         """No persistent connection to close in SQLite"""
         pass
 
-    async def store_short_term_memory(
+    async def store_context_memory(
         self,
         conversation_id: str,
         user_info: str,
@@ -599,7 +599,7 @@ class SQLiteDatabase(BaseDatabase):
         environment_info: str,
         how_to_address_user: str,
         summary_embedding: List[float],
-    ) -> ShortTermMemory:
+    ) -> ContextMemory:
         """Store short-term memory state with embedding"""
         async with self.get_connection() as conn:
             cursor = conn.execute(
@@ -642,7 +642,7 @@ class SQLiteDatabase(BaseDatabase):
 
             conn.commit()
 
-            return ShortTermMemory(
+            return ContextMemory(
                 conversation_id=conversation_id,
                 user_info=user_info,
                 last_conversation_summary=last_conversation_summary,
@@ -655,9 +655,9 @@ class SQLiteDatabase(BaseDatabase):
                 timestamp=datetime.now(),
             )
 
-    async def get_short_term_memory(
+    async def get_context_memory(
         self, conversation_id: Optional[str] = None
-    ) -> Optional[ShortTermMemory]:
+    ) -> Optional[ContextMemory]:
         """Retrieve current short-term memory state"""
         async with self.get_connection() as conn:
             query = """
@@ -678,7 +678,7 @@ class SQLiteDatabase(BaseDatabase):
             if not row:
                 return None
 
-            return ShortTermMemory(
+            return ContextMemory(
                 conversation_id=row[0],
                 user_info=row[1],
                 last_conversation_summary=row[2],
@@ -718,12 +718,12 @@ class SQLiteDatabase(BaseDatabase):
                 timestamp=datetime.fromisoformat(row[8]),
             )
 
-    async def search_similar_short_term_memories(
+    async def search_similar_context_memories(
         self,
         query_embedding: List[float],
         limit: int = 5,
         similarity_threshold: float = 0.1,
-    ) -> List[ShortTermMemory]:
+    ) -> List[ContextMemory]:
         """Search for similar short-term memories using cosine similarity"""
         async with self.get_connection() as conn:
             query_json = json.dumps(query_embedding)
@@ -761,7 +761,7 @@ class SQLiteDatabase(BaseDatabase):
 
             rows = cursor.fetchall()
             return [
-                ShortTermMemory(
+                ContextMemory(
                     conversation_id=row[0],
                     user_info=row[1],
                     last_conversation_summary=row[2],

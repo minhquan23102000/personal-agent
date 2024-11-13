@@ -13,7 +13,7 @@ from src.memory.models import (
     EntityRelationship,
     ConversationSummary,
     MessageType,
-    ShortTermMemory,
+    ContextMemory,
 )
 
 DB_URI = "test_memory"
@@ -214,7 +214,7 @@ async def test_store_and_get_short_term_memory(db):
         summary_embedding=[0.1] * 364,
     )
 
-    assert isinstance(stored_memory, ShortTermMemory)
+    assert isinstance(stored_memory, ContextMemory)
     assert stored_memory.conversation_id == "test_conv_1"
     assert stored_memory.last_conversation_summary == "Last conversation was about AI"
 
@@ -263,7 +263,7 @@ async def test_search_similar_short_term_memories(db):
 
     # Verify results
     assert len(results) == 3
-    assert all(isinstance(memory, ShortTermMemory) for memory in results)
+    assert all(isinstance(memory, ContextMemory) for memory in results)
     assert (
         len({memory.conversation_id for memory in results}) == 3
     )  # Unique conversations

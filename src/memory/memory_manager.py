@@ -11,7 +11,7 @@ from src.memory.models import (
     EntityRelationship,
     ConversationSummary,
     MessageType,
-    ShortTermMemory,
+    ContextMemory,
 )
 from src.memory.database.base import BaseDatabase
 from src.memory.embeddings.base import BaseEmbedding
@@ -412,7 +412,7 @@ class MemoryManager:
             logger.error(f"Error in query_entities: {str(e)}")
             raise
 
-    async def store_short_term_memory(
+    async def store_context_memory(
         self,
         conversation_id: str,
         user_info: str,
@@ -423,7 +423,7 @@ class MemoryManager:
         agent_info: str,
         environment_info: str,
         how_to_address_user: str,
-    ) -> ShortTermMemory:
+    ) -> ContextMemory:
         """Store short-term memory state with embedding"""
         try:
             # Create a summary text for embedding
@@ -432,7 +432,7 @@ class MemoryManager:
                 summary_text
             )
 
-            return await self.db.store_short_term_memory(
+            return await self.db.store_context_memory(
                 conversation_id=conversation_id,
                 user_info=user_info,
                 last_conversation_summary=last_conversation_summary,
@@ -448,19 +448,19 @@ class MemoryManager:
             logger.error(f"Error storing short-term memory: {str(e)}")
             raise
 
-    async def search_similar_short_term_memories(
+    async def search_similar_context_memories(
         self,
         query: str,
         limit: int = 3,
         threshold: float | None = None,
-    ) -> List[SearchResult[ShortTermMemory]]:
+    ) -> List[SearchResult[ContextMemory]]:
         """Search for similar short-term memories based on query text"""
         try:
             # Get query embedding
             query_embedding = await self.embedding_model.get_text_embedding(query)
 
             # Get similar memories
-            memories = await self.db.search_similar_short_term_memories(
+            memories = await self.db.search_similar_context_memories(
                 query_embedding=query_embedding,
                 limit=limit,
             )
@@ -485,16 +485,16 @@ class MemoryManager:
             logger.error(f"Error searching short-term memories: {str(e)}")
             raise
 
-    async def get_short_term_memory(
+    async def get_context_memory(
         self, conversation_id: Optional[str] = None
-    ) -> Optional[ShortTermMemory]:
+    ) -> Optional[ContextMemory]:
         """Retrieve the current short-term memory state
 
         Returns:
             Optional[ShortTermMemory]: The current memory state if it exists
         """
         try:
-            return await self.db.get_short_term_memory(conversation_id=conversation_id)
+            return await self.db.get_context_memory(conversation_id=conversation_id)
         except Exception as e:
             logger.error(f"Error retrieving short-term memory: {str(e)}")
             raise

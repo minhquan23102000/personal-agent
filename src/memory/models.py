@@ -13,7 +13,7 @@ class MessageType(str, Enum):
     TOOL = "tool"
 
 
-class ShortTermMemory(BaseModel):
+class ContextMemory(BaseModel):
     conversation_id: str
     user_info: str
     last_conversation_summary: str

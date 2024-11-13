@@ -33,7 +33,7 @@ def build_system_prompt(
     return agent.system_prompt
 
 
-def build_short_term_memory_prompt(agent: "BaseAgent") -> str:
+def build_context_memory_prompt(agent: "BaseAgent") -> str:
     if agent.context_memory:
         return inspect.cleandoc(
             f"""

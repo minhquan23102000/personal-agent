@@ -1,174 +1,107 @@
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List, Optional, Dict
 from mirascope.core import BaseToolKit, toolkit_tool
 from pydantic import Field, ValidationError
 from loguru import logger
 from src.config import DATA_DIR
 
 import json
+from datetime import datetime
+import os
+from pathlib import Path
+
+if TYPE_CHECKING:
+    from src.agent.base_agent import BaseAgent
 
 
 @dataclass
-class NotePage:
-    page_topic: str
-    paragraphs: List[str] = field(default_factory=list)
+class Note:
+    content: str
+    timestamp: datetime = field(default_factory=datetime.now)
 
-    def format(self) -> str:
-        """Format the note into a clean, readable format."""
-        formatted_note = f"### Note page topic: {self.page_topic}\n\n"
-        for idx, paragraph in enumerate(self.paragraphs, 1):
-            formatted_note += f"Line {idx}: {paragraph}\n\n"
-        return formatted_note
+    def to_dict(self) -> Dict:
+        """Convert note to dictionary for serialization."""
+        return {"content": self.content, "timestamp": self.timestamp.isoformat()}
 
-
-def save_notes(agent_id: str, notes: dict[str, NotePage]) -> None:
-    """Save all notes to a JSON file."""
-    with open(DATA_DIR / f"{agent_id}_notes.json", "w") as f:
-        json.dump({topic: note.__dict__ for topic, note in notes.items()}, f, indent=4)
+    @classmethod
+    def from_dict(cls, data: Dict) -> "Note":
+        """Create note from dictionary."""
+        return cls(
+            content=data["content"], timestamp=datetime.fromisoformat(data["timestamp"])
+        )
 
 
-def load_notes(agent_id: str) -> dict[str, NotePage]:
-    """Load all notes from a JSON file."""
-    notes_file_path = DATA_DIR / f"{agent_id}_notes.json"
-    if notes_file_path.exists():
-        with open(notes_file_path, "r") as f:
-            return {topic: NotePage(**note) for topic, note in json.load(f).items()}
-    return {}
+class ShortTermMemoryToolKit(BaseToolKit):
+    """Simple memory toolkit for storing and retrieving information."""
 
+    __namespace__ = "memory_short_term"
+    memories: dict[str, Note] = field(default_factory=dict)
+    agent: "BaseAgent"
 
-def format_notes(notes: dict[str, NotePage]) -> str:
-    """Format all notes into a clean format suitable for system prompts.
-
-    Returns:
-        Formatted string containing all notes
-    """
-    if not notes:
-        return "Empty"
-
-    formatted_notes = ""
-    for note in notes.values():
-        formatted_notes += f"{note.format()}\n"
-    return formatted_notes.strip()
-
-
-class NoteTakingToolkit(BaseToolKit):
-    """This is agent's note taking. Use this tool to save important information, knowledge, facts, ideas, plans, etc."""
-
-    __namespace__ = "note_taking"
-
-    notes: dict[str, NotePage] = field(default_factory=dict)
+    def __init__(self, agent: "BaseAgent"):
+        super().__init__()
+        self.agent = agent
+        self.memory_file = (
+            Path(DATA_DIR) / self.agent.agent_id / "short_term_memory.json"
+        )
+        self.load_memories()  # Load memories on initialization
 
     @toolkit_tool
-    async def add_note(self, topic: str, paragraphs: List[str]) -> str:
-        """Add a new note with the given topic and paragraphs. Use this tool to save important information, knowledge, facts, ideas, plans, etc.
-
-
+    async def remember(self, key: str, content: str) -> str:
+        """Store or update a piece of information in memory.
 
         Args:
-            self: self.
-            topic: The topic/title of the note.
-            paragraphs: List of paragraph contents.
+            key: A descriptive label for this memory (e.g., 'user_name', 'task_{name}_goal')
+            content: The information to remember
         """
-
-        if topic in self.notes:
-            self.notes[topic].paragraphs.extend(paragraphs)
-        else:
-            self.notes[topic] = NotePage(page_topic=topic, paragraphs=paragraphs)
-
-        logger.debug(format_notes(self.notes))
-
-        return f"Successfully added note: {topic}"
+        self.memories[key] = Note(content=content)
+        self.save_memories()  # Auto-save after each new memory
+        return f"Remembered: {key}"
 
     @toolkit_tool
-    async def update_note(self, topic: str, line_number: int, new_content: str) -> str:
-        """Update a specific paragraph in an existing note. Use this tool to update the outdated content of a specific paragraph in an existing note.
+    async def forget(self, key: str) -> str:
+        """Forget a piece of information from memory.
 
         Args:
-            self: self.
-            topic: The topic of the note to update.
-            line_number: The 1-based index of the paragraph to update.
-            new_content: The new content for the paragraph.
+            key: The label of the memory to forget
         """
-        if topic not in self.notes:
-            return f"Note with topic '{topic}' not found"
+        if key in self.memories:
+            del self.memories[key]
+            return f"Forgot: {key}"
+        return f"No memory found for: {key}"
 
-        note = self.notes[topic]
-        if not (1 <= line_number <= len(note.paragraphs)):
-            return f"Invalid line number. Note has {len(note.paragraphs)} paragraphs"
+    def save_memories(self) -> None:
+        """Save memories to disk."""
+        self.memory_file.parent.mkdir(parents=True, exist_ok=True)
 
-        note.paragraphs[line_number - 1] = new_content
-        logger.debug(format_notes(self.notes))
+        memory_data = {key: note.to_dict() for key, note in self.memories.items()}
 
-        return f"Successfully updated paragraph {line_number} in note: {topic}"
+        with open(self.memory_file, "w") as f:
+            json.dump(memory_data, f, indent=2)
 
-    @toolkit_tool
-    async def delete_note_topic(self, topic: str) -> str:
-        """Delete an entire note with all its paragraphs. Use this tool to remove a complete note topic.
+    def load_memories(self) -> None:
+        """Load memories from disk."""
+        if not self.memory_file.exists():
+            self.memories = {}
+            return
 
-        Args:
-            topic: The topic of the note to delete.
-        """
-        if topic not in self.notes:
-            return f"Note with topic '{topic}' not found"
+        try:
+            with open(self.memory_file, "r") as f:
+                memory_data = json.load(f)
 
-        del self.notes[topic]
-        logger.debug(format_notes(self.notes))
-        return f"Successfully deleted note: {topic}"
+            self.memories = {
+                key: Note.from_dict(data) for key, data in memory_data.items()
+            }
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.error(f"Error loading memories: {e}")
+            self.memories = {}
 
-    @toolkit_tool
-    async def delete_note_lines(self, topic: str, line_numbers: List[int]) -> str:
-        """Delete specific paragraphs from a note. Use this tool to remove one or more paragraphs from an existing note.
+    def format_memories(self) -> str:
+        """Format all memories for inclusion in system prompt."""
+        if not self.memories:
+            return "No memories stored."
 
-        Args:
-            self: self.
-            topic: The topic of the note.
-            line_numbers: List of 1-based line numbers to delete.
-        """
-        if topic not in self.notes:
-            return f"Note with topic '{topic}' not found"
-
-        note = self.notes[topic]
-        max_lines = len(note.paragraphs)
-
-        # Validate line numbers
-        invalid_lines = [ln for ln in line_numbers if not (1 <= ln <= max_lines)]
-        if invalid_lines:
-            return (
-                f"Invalid line numbers {invalid_lines}. Note has {max_lines} paragraphs"
-            )
-
-        # Sort in reverse order to avoid index shifting
-        for line_num in sorted(line_numbers, reverse=True):
-            note.paragraphs.pop(line_num - 1)
-
-        logger.debug(format_notes(self.notes))
-        return f"Successfully deleted paragraphs {line_numbers} from note: {topic}"
-
-    # @toolkit_tool
-    # async def clean_notes(self) -> str:
-    #     """Clean all notes. Use this to reset your notes. Be very careful with this tool as it will remove all your notes."""
-    #     self.notes = {}
-    #     logger.debug(format_notes(self.notes))
-    #     return "Successfully cleaned all notes"
-
-
-async def main():
-    note_taking_toolkit = NoteTakingToolkit()
-    print(await note_taking_toolkit.add_note("test", ["test1", "test2"]))
-    await note_taking_toolkit.add_note("test2", ["test3", "test4"])
-
-    await note_taking_toolkit.update_note("test", 1, "test5")
-    print(await note_taking_toolkit.delete_note_lines("test", [1]))
-    print(await note_taking_toolkit.delete_note_topic("test2"))
-
-    # save notes to file
-    save_notes("test note", note_taking_toolkit.notes)
-
-    # load notes
-    print(load_notes("test note"))
-
-
-if __name__ == "__main__":
-    import asyncio
-
-    asyncio.run(main())
+        formatted = "Current memories:\n"
+        for key, note in self.memories.items():
+            formatted += f"- {key}: {note.content}\n"
+        return formatted

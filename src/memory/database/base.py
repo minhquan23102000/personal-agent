@@ -9,7 +9,7 @@ from src.memory.models import (
     EntityRelationship,
     ConversationSummary,
     MessageType,
-    ShortTermMemory,
+    ContextMemory,
 )
 
 
@@ -42,7 +42,7 @@ class BaseDatabase(ABC):
         pass
 
     @abstractmethod
-    async def store_short_term_memory(
+    async def store_context_memory(
         self,
         conversation_id: str,
         user_info: str,
@@ -54,14 +54,14 @@ class BaseDatabase(ABC):
         environment_info: str,
         how_to_address_user: str,
         summary_embedding: List[float],
-    ) -> ShortTermMemory:
+    ) -> ContextMemory:
         """Store short-term memory state with embedding"""
         pass
 
     @abstractmethod
-    async def get_short_term_memory(
+    async def get_context_memory(
         self, conversation_id: Optional[str] = None
-    ) -> Optional[ShortTermMemory]:
+    ) -> Optional[ContextMemory]:
         """Retrieve current short-term memory state"""
         pass
 
@@ -172,11 +172,11 @@ class BaseDatabase(ABC):
         pass
 
     @abstractmethod
-    async def search_similar_short_term_memories(
+    async def search_similar_context_memories(
         self,
         query_embedding: List[float],
         limit: int = 5,
-    ) -> List[ShortTermMemory]:
+    ) -> List[ContextMemory]:
         """Search for similar short-term memories"""
         pass
 

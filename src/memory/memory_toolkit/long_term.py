@@ -132,7 +132,7 @@ class LongtermMemoryToolKit(BaseToolKit):
                 return "Error: Memory manager not available"
 
             similar_memories = (
-                await self.memory_manager.search_similar_short_term_memories(
+                await self.memory_manager.search_similar_context_memories(
                     query=context_query,
                     limit=3,
                     threshold=max(self.similarity_threshold - 0.3, 0.1),

@@ -19,7 +19,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from mirascope.retries.tenacity import collect_errors
 from pydantic import ValidationError
 from src.memory.memory_manager import MemoryManager
-from src.memory.models import ConversationSummary, MessageType, ShortTermMemory
+from src.memory.models import ConversationSummary, MessageType, ContextMemory
 from src.memory.memory_toolkit.long_term import get_memory_toolkit
 from src.util.rotating_list import RotatingList
 import os
@@ -31,7 +31,7 @@ from src.core.prompt.tool_prompt import (
 from src.core.prompt.error_prompt import format_error_message
 from src.core.prompt.system import (
     build_system_prompt,
-    build_short_term_memory_prompt,
+    build_context_memory_prompt,
     build_recent_conversation_context,
 )
 from src.core.prompt.tool_prompt import (
@@ -41,12 +41,7 @@ from src.core.prompt.tool_prompt import (
 from src.interface import ConsoleInterface, BaseInterface
 
 from src.core.reasoning.base import BaseReasoningEngine
-from src.memory.memory_toolkit.note_taking import (
-    NoteTakingToolkit,
-    format_notes,
-    save_notes,
-    load_notes,
-)
+from src.memory.memory_toolkit.note_taking import ShortTermMemoryToolKit
 
 
 GEMINI_SAFETY_SETTINGS = [
@@ -87,11 +82,11 @@ class BaseAgent:
     max_retries: int = 5
 
     memory_manager: Optional[MemoryManager] = None
-    context_memory: Optional[ShortTermMemory] = None
+    context_memory: Optional[ContextMemory] = None
     tools: List[Union[Type[BaseTool], Callable]] = field(default_factory=list)
 
     reasoning_engine: Optional[BaseReasoningEngine] = None
-    note_taking_toolkit: NoteTakingToolkit = field(default_factory=NoteTakingToolkit)
+    short_term_memory: ShortTermMemoryToolKit | None = None
 
     api_keys: list[str] | None = None
     rotating_api_keys: RotatingList | None = None
@@ -126,7 +121,7 @@ class BaseAgent:
                 f"Reasoning Engine: {self.reasoning_engine.__class__.__name__}"
             )
 
-        self._initialize_note_taking_toolkit()
+        self.short_term_memory = ShortTermMemoryToolKit(agent=self)
 
     def _setup_api_keys(self) -> None:
         """Setup API key rotation if configured."""
@@ -147,13 +142,8 @@ class BaseAgent:
             self.add_tools(dynamic_toolkit.create_tools())
             self.memory_manager.set_agent(self)
 
-            self.add_tools(self.note_taking_toolkit.create_tools())
-
-    def _initialize_note_taking_toolkit(self) -> None:
-        """Initialize the note taking toolkit."""
-        self.note_taking_toolkit.notes = load_notes(self.agent_id)
-        # turn off load notes
-        return
+        if self.short_term_memory:
+            self.add_tools(self.short_term_memory.create_tools())
 
     def rotate_api_key(self) -> None:
         """Rotate the api key."""
@@ -187,9 +177,6 @@ class BaseAgent:
         reflection_performed = await self.memory_manager.check_and_perform_reflection()
         self.conversation_id = str(uuid.uuid4())
 
-        # turn off notes after reflection
-        self.note_taking_toolkit.notes = {}
-
         # Load latest summary for system prompt
         latest_summary = await self.memory_manager.get_latest_conversation_summary()
         if latest_summary:
@@ -206,7 +193,7 @@ class BaseAgent:
         )
 
         # Load short term memory
-        self.context_memory = await self.memory_manager.get_short_term_memory()
+        self.context_memory = await self.memory_manager.get_context_memory()
 
         self.interface.print_system_message(
             f"Prompt after initializing:\n{self._build_prompt()[0].content}"
@@ -220,9 +207,13 @@ class BaseAgent:
         
         {system_prompt}
         
+        # AGENT'S SHORT-TERM MEMORY:
+        
+        {memories_prompt}
+        
         # CONTEXT MEMORY (IMPORTANT INFORMATION AND CONTEXT FOR THE AGENT)
         
-        {short_term_memory_prompt}
+        {context_memory_prompt}
         
         # RECENT CONVERSATION SUMMARY
         
@@ -232,28 +223,16 @@ class BaseAgent:
         
         {tools_prompt}
         
-        # AGENT'S NOTES (IMPORTANT INFORMATION, KNOWLEDGES, IDEAS, PLANS, ETC.):
-        
-        ## NOTE USAGE GUIDLINES
-        
-        * Maintain organized and up-to-date notes by regularly updating them with relevant and concise information. Use clear titles for each topic and ensure the content focuses on important facts, ideas, and plans while avoiding unnecessary details.
-        * The note content is for the agent's own use, not for the user. So do not mistake the user can view the note content.
-        * The note is persistent in this conversation, after the conversation ends, the note will be cleaned. 
-        
-        ## NOTES CONTENT
-        
-        {notes_prompt}
-        
         MESSAGES: {history}
         """
     )
     def _build_prompt(
         self,
         include_history: bool = True,
-        include_short_term_memory: bool = True,
+        include_context_memory: bool = True,
         include_system_prompt: bool = True,
         include_tools_prompt: bool = True,
-        include_notes_prompt: bool = True,
+        include_memories_prompt: bool = True,
         include_recent_conversation_context: bool = True,
     ) -> BaseDynamicConfig:
         """Build the prompt for the agent using the current state."""
@@ -262,8 +241,8 @@ class BaseAgent:
             if include_system_prompt
             else ""
         )
-        short_term_memory_prompt = (
-            build_short_term_memory_prompt(self) if include_short_term_memory else ""
+        context_memory_prompt = (
+            build_context_memory_prompt(self) if include_context_memory else ""
         )
 
         history = self.history if include_history else []
@@ -273,10 +252,8 @@ class BaseAgent:
             else ""
         )
 
-        notes_prompt = (
-            format_notes(self.note_taking_toolkit.notes)
-            if include_notes_prompt and self.note_taking_toolkit
-            else ""
+        memories_prompt = (
+            self.short_term_memory.format_memories() if include_memories_prompt else ""
         )
 
         recent_conversation_context = (
@@ -288,10 +265,10 @@ class BaseAgent:
         return {
             "computed_fields": {
                 "system_prompt": system_prompt,
-                "short_term_memory_prompt": short_term_memory_prompt,
+                "context_memory_prompt": context_memory_prompt,
                 "history": history,
                 "tools_prompt": tools_prompt,
-                "notes_prompt": notes_prompt,
+                "memories_prompt": memories_prompt,
                 "recent_conversation_context": recent_conversation_context,
             }
         }
@@ -475,9 +452,6 @@ class BaseAgent:
 
             if self.memory_manager:
                 if len(self.history) >= 6:
-                    # save notes
-                    save_notes(self.agent_id, self.note_taking_toolkit.notes)
-
                     user_feedback = self.interface.input(
                         f"Please provide your feedback for the conversation with {self.agent_id}: "
                     )
