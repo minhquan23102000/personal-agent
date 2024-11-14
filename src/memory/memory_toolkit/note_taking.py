@@ -1,17 +1,15 @@
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional, Dict
+from typing import TYPE_CHECKING, List, Optional, Dict, Any
 from mirascope.core import BaseToolKit, toolkit_tool
 from pydantic import Field, ValidationError
 from loguru import logger
 from src.config import DATA_DIR
-
+import tiktoken
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from pathlib import Path
 
-if TYPE_CHECKING:
-    from src.agent.base_agent import BaseAgent
 
 
 @dataclass
@@ -32,19 +30,35 @@ class Note:
 
 
 class ShortTermMemoryToolKit(BaseToolKit):
-    """Simple memory toolkit for storing and retrieving information."""
+    """Simple memory toolkit for storing and retrieving information with decay and size limits."""
 
     __namespace__ = "memory_short_term"
-    memories: dict[str, Note] = field(default_factory=dict)
-    agent: "BaseAgent"
 
-    def __init__(self, agent: "BaseAgent"):
-        super().__init__()
-        self.agent = agent
-        self.memory_file = (
-            Path(DATA_DIR) / self.agent.agent_id / "short_term_memory.json"
-        )
+    save_path: str
+    memories: dict[str, Note] = Field(default_factory=dict)
+    memory_file: Path = Field(default=None)
+    tokenizer: Any = Field(default=None)
+    
+    # Configuration for memory management
+    max_token_size: int = 25_000  # Maximum total tokens in short-term memory
+    memory_decay_hours: int = 24*7  # Memories older than this will be removed
+    encoding_model: str = "cl100k_base"  # OpenAI's encoding model
+
+    def _initialize(self):
+        if self.memory_file is None:
+            self.memory_file = Path(DATA_DIR) / self.save_path / "short_term_memory.json"
+        if self.tokenizer is None:
+            self.tokenizer = tiktoken.get_encoding(self.encoding_model)
         self.load_memories()  # Load memories on initialization
+        
+            
+        
+    def _get_total_tokens(self) -> int:
+        """Calculate total tokens in all memories."""
+        total_tokens = 0
+        for note in self.memories.values():
+            total_tokens += len(self.tokenizer.encode(note.content))
+        return total_tokens
 
     @toolkit_tool
     async def remember(self, key: str, content: str) -> str:
@@ -56,12 +70,15 @@ class ShortTermMemoryToolKit(BaseToolKit):
             content: The information to remember
         """
         self.memories[key] = Note(content=content)
-        self.save_memories()  # Auto-save after each new memory
+        self.save_memories()
+
         return f"Remembered: {key}"
 
     def save_memories(self) -> None:
         """Save memories to disk."""
         self.memory_file.parent.mkdir(parents=True, exist_ok=True)
+
+        self._apply_memory_management()
 
         memory_data = {key: note.to_dict() for key, note in self.memories.items()}
 
@@ -84,6 +101,22 @@ class ShortTermMemoryToolKit(BaseToolKit):
         except (json.JSONDecodeError, KeyError) as e:
             logger.error(f"Error loading memories: {e}")
             self.memories = {}
+
+    def _apply_memory_management(self):
+        """Apply memory decay and token size limits."""
+        current_time = datetime.now()
+        decay_threshold = current_time - timedelta(hours=self.memory_decay_hours)
+        
+        # Remove old memories
+        self.memories = {
+            key: note for key, note in self.memories.items()
+            if note.timestamp > decay_threshold
+        }
+        
+        # If still over token limit, remove oldest memories until under limit
+        while self._get_total_tokens() > self.max_token_size and self.memories:
+            oldest_key = min(self.memories.keys(), key=lambda k: self.memories[k].timestamp)
+            del self.memories[oldest_key]
 
     def format_memories(self) -> str:
         """Format all memories for inclusion in system prompt."""

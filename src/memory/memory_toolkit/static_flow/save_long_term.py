@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from loguru import logger
 from src.core.prompt.error_prompt import format_error_message
 from typing import TYPE_CHECKING
-from src.memory.memory_toolkit.note_taking import format_notes
+
 
 if TYPE_CHECKING:
     from src.agent.base_agent import BaseAgent
@@ -53,7 +53,7 @@ async def save_long_term_memory(agent: "BaseAgent") -> None:
 
         prompt = base_long_term_memory_prompt(
             history=agent._build_prompt(),
-            notes=format_notes(agent.note_taking_toolkit.notes),
+            notes=agent.short_term_memory.format_memories(),
         )
 
         @retry(

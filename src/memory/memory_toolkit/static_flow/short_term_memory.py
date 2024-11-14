@@ -71,7 +71,7 @@ async def generate_updated_short_term_memory(
     """Get updated short-term memory state after conversation."""
     try:
         prompt = short_term_memory_prompt(
-            history=agent._build_prompt(include_short_term_memory=False),
+            history=agent._build_prompt(include_context_memory=False),
             current_memory=agent.context_memory,
             user_feedback=user_feedback,
         )

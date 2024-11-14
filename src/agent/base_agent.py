@@ -74,7 +74,7 @@ class BaseAgent:
     """Base class for all agents with memory integration."""
 
     default_model: str = "gemini/gemini-1.5-flash-002"
-    reflection_model: str = "gemini/gemini-1.5-flash-002"
+    reflection_model: str = "gemini/gemini-1.5-pro-002"
 
     agent_id: str = field(default_factory=generate_agent_id)
     system_prompt: str = "You are an AI agent."
@@ -86,7 +86,7 @@ class BaseAgent:
     tools: List[Union[Type[BaseTool], Callable]] = field(default_factory=list)
 
     reasoning_engine: Optional[BaseReasoningEngine] = None
-    short_term_memory: ShortTermMemoryToolKit | None = None
+    short_term_memory: ShortTermMemoryToolKit  | None = None
 
     api_keys: list[str] | None = None
     rotating_api_keys: RotatingList | None = None
@@ -121,7 +121,8 @@ class BaseAgent:
                 f"Reasoning Engine: {self.reasoning_engine.__class__.__name__}"
             )
 
-        self.short_term_memory = ShortTermMemoryToolKit(agent=self)
+        self.short_term_memory = ShortTermMemoryToolKit(save_path=self.agent_id)
+        self.short_term_memory._initialize()
 
     def _setup_api_keys(self) -> None:
         """Setup API key rotation if configured."""

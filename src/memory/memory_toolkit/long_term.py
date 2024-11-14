@@ -10,15 +10,15 @@ import inspect
 class LongtermMemoryToolKit(BaseToolKit):
     """Toolkit for managing memory operations including storage and retrieval. Use this toolkit to store and retrieve knowledge, facts, entities, relationships, and conversation contexts."""
 
-    __namespace__ = "long_term_memory_database"
+    __namespace__ = "long_term_memory"
 
     memory_manager: MemoryManager
 
     similarity_threshold: float = 0.7
 
     @toolkit_tool
-    async def search_knowledge_facts(self, query: str) -> str:
-        """Search knowledge, facts from your long-term memory in external long term memory database.
+    async def recall_knowledge_facts(self, query: str) -> str:
+        """Recall knowledge, facts from your long-term memory in external long term memory database.
 
         You can use this function in the following scenarios:
         - When you need to recall important information

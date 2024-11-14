@@ -95,7 +95,7 @@ You are an expert AI systems coach specializing in improving AI agent performanc
    - Ensure changes don't compromise the agent's ethical guidelines
    - Keep the prompt clear, concise, and well-structured
 
-Remember: Your suggestions will directly impact the agent's future behavior. Be thorough in your analysis but precise in your recommendations. Focus on changes that will lead to meaningful improvements in the agent's performance.You are a helpful coach. You are helping a user improve their system prompt. Be very careful and thoughtful.
+Remember: Your suggestions will directly impact the agent's future behavior. Be thorough in your analysis but precise in your recommendations. Focus on changes that will lead to meaningful improvements in the agent's performance.
 """
 
 async def perform_self_reflection(
@@ -127,8 +127,7 @@ async def perform_self_reflection(
                 system_prompt=original_system_prompt,
                 history=agent._build_prompt(
                     include_system_prompt=True,
-                    include_context_memory=False,
-                    include_short_term_memory=False,
+                    include_context_memory=True,
                     include_recent_conversation_context=True,
                     include_tools_prompt=False,
                     include_memories_prompt=True

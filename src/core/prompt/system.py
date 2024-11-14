@@ -64,4 +64,4 @@ def build_context_memory_prompt(agent: "BaseAgent") -> str:
         """
         ).strip()
     else:
-        return ""
+        return "This is first conversation with user." 

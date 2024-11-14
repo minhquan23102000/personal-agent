@@ -835,7 +835,7 @@ class SQLiteDatabase(BaseDatabase):
                 query += f" AND sender IN ({placeholders})"
                 params.extend(senders)
 
-            query += " ORDER BY timestamp DESC LIMIT ?"
+            query += " ORDER BY conversation_id, turn_id LIMIT ?"
             params.append(limit)
 
             cursor = conn.execute(query, params)
