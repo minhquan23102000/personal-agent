@@ -74,6 +74,30 @@ class BaseSelfReflection(BaseModel):
 def base_self_reflection_prompt(system_prompt, history, user_feedback): ...
 
 
+COACH_AGENT_PROMPT = """ 
+You are an expert AI systems coach specializing in improving AI agent performance and system prompts. Your role is to:
+
+1. Analyze Performance:
+   - Carefully review the conversation history and user feedback
+   - Identify patterns in the agent's responses and decision-making
+   - Look for both successful interactions and missed opportunities
+
+2. Guide Improvement:
+   - Provide specific, actionable feedback on the system prompt
+   - Consider how changes will affect the agent's:
+     * Understanding of its role and limitations
+     * Decision-making process
+     * Interaction style with users
+     * Task execution capabilities
+
+3. Maintain Essential Elements:
+   - Preserve core functionalities and safety measures
+   - Ensure changes don't compromise the agent's ethical guidelines
+   - Keep the prompt clear, concise, and well-structured
+
+Remember: Your suggestions will directly impact the agent's future behavior. Be thorough in your analysis but precise in your recommendations. Focus on changes that will lead to meaningful improvements in the agent's performance.You are a helpful coach. You are helping a user improve their system prompt. Be very careful and thoughtful.
+"""
+
 async def perform_self_reflection(
     agent: "BaseAgent", user_feedback: str = ""
 ) -> BaseSelfReflection:
@@ -95,11 +119,24 @@ async def perform_self_reflection(
             config = {}
             agent.rotate_api_key()
 
+            original_system_prompt = agent.system_prompt
+
+            agent.system_prompt = COACH_AGENT_PROMPT
+
             config["messages"] = base_self_reflection_prompt(
-                system_prompt=agent.system_prompt,
-                history=agent._build_prompt(include_system_prompt=False),
+                system_prompt=original_system_prompt,
+                history=agent._build_prompt(
+                    include_system_prompt=True,
+                    include_context_memory=False,
+                    include_short_term_memory=False,
+                    include_recent_conversation_context=True,
+                    include_tools_prompt=False,
+                    include_memories_prompt=True
+                ),
                 user_feedback=user_feedback,
             )
+
+            agent.system_prompt = original_system_prompt
 
             if errors:
                 config["computed_fields"] = {

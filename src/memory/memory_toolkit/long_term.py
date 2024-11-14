@@ -14,7 +14,7 @@ class LongtermMemoryToolKit(BaseToolKit):
 
     memory_manager: MemoryManager
 
-    similarity_threshold: float = 0.5
+    similarity_threshold: float = 0.7
 
     @toolkit_tool
     async def search_knowledge_facts(self, query: str) -> str:
@@ -62,57 +62,6 @@ class LongtermMemoryToolKit(BaseToolKit):
                 f"Error searching knowledge: {e}. Traceback: {traceback.format_exc()}"
             )
             return f"Error searching knowledge: {str(e)}. Traceback: {traceback.format_exc()}"
-
-    @toolkit_tool
-    async def search_entities_facts(self, entities: List[str]) -> str:
-        """Search knowledge, facts of entities or relationships between entities in external long term memory database.
-
-        You can use this function in the following scenarios:
-        - When you need to find connections between entities
-        - When you need to find relationships between entities
-        - When you need to find information, knowledge, or facts about entities
-
-
-        Use this when you do not have context in the current moment for a specific topic user asking or for task you are working on.
-
-        Args:
-            entities (List[str]): A list of entity names to search for relationships and knowledge.
-        """
-        try:
-            if not self.memory_manager:
-                return "Error: Memory manager not available"
-
-            query = ", ".join(entities)
-            relationships, related_knowledge = await self.memory_manager.query_entities(
-                query=query, threshold=self.similarity_threshold
-            )
-
-            results = []
-            if relationships:
-                results.append("Entity Relationships:")
-                for rel in relationships:
-                    results.append(
-                        f"- {rel.item.relationship_text} (similarity: {rel.score:.2f})"
-                    )
-
-            if related_knowledge:
-                results.append("\nRelated Knowledge:")
-                for entry in related_knowledge:
-                    results.append(
-                        f"- {entry.item.text} (similarity: {entry.score:.2f})"
-                    )
-
-            return (
-                "\n".join(results)
-                if results
-                else "No relationships found between these entities."
-            )
-
-        except Exception as e:
-            logger.error(
-                f"Error searching relationships: {e}. Traceback: {traceback.format_exc()}"
-            )
-            return f"Error searching relationships: {str(e)}. Traceback: {traceback.format_exc()}"
 
     @toolkit_tool
     async def recall_similar_conversation_contexts(self, context_query: str) -> str:
@@ -192,7 +141,7 @@ class LongtermMemoryToolKit(BaseToolKit):
             conversation_messages = await self.memory_manager.get_conversation_details(
                 conversation_id=conversation_id,
                 senders=["user", "assistant"],
-                limit=50,  # Reasonable limit for conversation length
+                limit=70,  # Reasonable limit for conversation length
             )
 
             if not conversation_messages:

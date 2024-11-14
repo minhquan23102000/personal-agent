@@ -54,6 +54,9 @@ async def reflection_conversation(
         reflection_response = await perform_self_reflection(
             memory_manager.agent, user_feedback
         )
+        
+        # update system prompt
+        memory_manager.agent.system_prompt = reflection_response.improved_prompt
 
         print(f"Summary: {summary_str}\n\n")
         print(f"Reflection: {reflection_response}\n\n")

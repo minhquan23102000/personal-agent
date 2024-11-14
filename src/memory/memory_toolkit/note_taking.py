@@ -51,24 +51,13 @@ class ShortTermMemoryToolKit(BaseToolKit):
         """Store or update a piece of information in memory.
 
         Args:
+            self: self
             key: A descriptive label for this memory (e.g., 'user_name', 'task_{name}_goal')
             content: The information to remember
         """
         self.memories[key] = Note(content=content)
         self.save_memories()  # Auto-save after each new memory
         return f"Remembered: {key}"
-
-    @toolkit_tool
-    async def forget(self, key: str) -> str:
-        """Forget a piece of information from memory.
-
-        Args:
-            key: The label of the memory to forget
-        """
-        if key in self.memories:
-            del self.memories[key]
-            return f"Forgot: {key}"
-        return f"No memory found for: {key}"
 
     def save_memories(self) -> None:
         """Save memories to disk."""
