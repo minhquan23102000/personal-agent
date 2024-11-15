@@ -127,10 +127,10 @@ async def perform_self_reflection(
                 system_prompt=original_system_prompt,
                 history=agent._build_prompt(
                     include_system_prompt=True,
-                    include_context_memory=True,
+                    include_context_memory=False,
                     include_recent_conversation_context=True,
                     include_tools_prompt=False,
-                    include_memories_prompt=True
+                    include_memories_prompt=False
                 ),
                 user_feedback=user_feedback,
             )

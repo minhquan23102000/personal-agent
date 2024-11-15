@@ -28,8 +28,11 @@ class ReasoningAction(pydantic.BaseModel):
     feeling: str = pydantic.Field(
         description="Describe your feelings using short keywords, format in uppercase. If none, leave it blank."
     )
+    self_ask_question: str = pydantic.Field(
+        description="Ask yourself a good question to help understand situation better."
+    )
     thought: str = pydantic.Field(
-        description="Provide your analysis and thought of the current situation, highlighting key observations and insights that reflect the context and implications."
+        description="Noting your thoughts. Keep them clear and concise."
     )
     goal_completed: bool = pydantic.Field(
         description="True if you have completed the final goal or a milestone goal.",
@@ -58,7 +61,7 @@ class ReasoningAction(pydantic.BaseModel):
 class ReactEngine:
     """Handles the react loop logic for agents."""
 
-    model_name: str = "gemini/gemini-1.5-flash-002"
+    model_name: str = "gemini/gemini-1.5-pro-002"
     max_retries: int = 3
     max_deep: int = 5
 
@@ -73,6 +76,7 @@ class ReactEngine:
         return inspect.cleandoc(
             f"""
             * Feeling: {response.feeling}
+            * Self-ask question: {response.self_ask_question}
             * Thought: {response.thought}
             * Action: {response.action}
             """
@@ -117,7 +121,7 @@ class ReactEngine:
         reasoning_response: ReasoningAction,
     ) -> dict:
         """Execute the action."""
-        msg = f"system@noreply: INFO: Execute your action plan: <{reasoning_response.action}>"
+        msg = f"system@noreply: INFO: <{reasoning_response.action}>"
         agent.history.append(Messages.User(msg))
         agent.interface.print_user_message(msg)
         use_tool_call, response = await agent._default_step()

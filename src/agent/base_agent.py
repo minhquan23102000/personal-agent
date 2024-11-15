@@ -78,7 +78,7 @@ class BaseAgent:
 
     agent_id: str = field(default_factory=generate_agent_id)
     system_prompt: str = "You are an AI agent."
-    temperature: float = 0.5
+    temperature: float = 0.2
     max_retries: int = 5
 
     memory_manager: Optional[MemoryManager] = None
@@ -278,7 +278,7 @@ class BaseAgent:
         self.history.append(message)
         await self.store_turn_message(message, "assistant")
 
-    @litellm.call(model=default_model)
+    @litellm.call(model=default_model, call_params={"temperature": temperature})
     def _default_call(
         self, query: BaseMessageParam | None = None, include_tools: bool = True
     ) -> BaseDynamicConfig:
