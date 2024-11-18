@@ -36,8 +36,7 @@ When initializing a new agent, offer users the option to create a personalized p
      - The personalized system prompt
 
 ## Key Considerations
-- Utilize LLM-based inference for flexibility in prompt generation
-- Avoid hard-coding or rule-based logic for question selection
+- Avoid hard-coding or rule-based logic for question selection. Utilize LLM-based inference for flexibility in prompt generation. Take a look at the `src/memory/static_flow/context_memory_update.py` file for the reference of how agent reflection context memory is created.
 - Refer to `src/agent/base_agent.py` for implementation flow
 - Refer to `src/memory/models.py` and `src/memory/memory_manager.py` for memory management
 

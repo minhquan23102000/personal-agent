@@ -42,6 +42,7 @@ from src.interface import ConsoleInterface, BaseInterface
 
 from src.core.reasoning.base import BaseReasoningEngine
 from src.memory.memory_toolkit.note_taking import ShortTermMemoryToolKit
+from src.memory.memory_toolkit.static_flow.init_agent import AgentInitializer
 
 
 GEMINI_SAFETY_SETTINGS = [
@@ -86,7 +87,7 @@ class BaseAgent:
     tools: List[Union[Type[BaseTool], Callable]] = field(default_factory=list)
 
     reasoning_engine: Optional[BaseReasoningEngine] = None
-    short_term_memory: ShortTermMemoryToolKit  | None = None
+    short_term_memory: ShortTermMemoryToolKit | None = None
 
     api_keys: list[str] | None = None
     rotating_api_keys: RotatingList | None = None
@@ -174,7 +175,12 @@ class BaseAgent:
             )
             return
 
-        # Check and perform reflection if needed
+        # Check if this is first interaction (no context memory)
+        context_memory = await self.memory_manager.get_context_memory()
+        if not context_memory:
+            await AgentInitializer.initialize_agent(self)
+
+        # Continue with existing initialization...
         reflection_performed = await self.memory_manager.check_and_perform_reflection()
         self.conversation_id = str(uuid.uuid4())
 

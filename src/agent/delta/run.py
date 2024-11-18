@@ -33,7 +33,7 @@ class Delta3000(BaseAgent):
     """An agent that helps users find and recommend books."""
 
     system_prompt: str = SYSTEM_PROMPT_PATH.read_text()
-    agent_id: str = "Delta 2001"
+    agent_id: str = "DELTA MODEL - 3000"
     api_key_env_var: str = "GEMINI_API_KEY"
     api_keys: list[str] = field(default_factory=lambda: GOOGLE_API_KEY_LIST)
 
