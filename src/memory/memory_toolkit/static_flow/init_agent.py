@@ -27,8 +27,8 @@ class UserProfile(BaseModel):
         description="How the user prefers to receive information and interact"
     )
     how_to_address_user: str = Field(description="How the user prefers to be addressed")
-    agent_info: str = Field(
-        description="Initial information about the agent include profile, gender, personality, role, name, background, characteristics, style, etc."
+    agent_background_story: str = Field(
+        description="Craft a compelling background story for an agent that reflects the user's values and preferences, highlighting their motivations, experiences, and core beliefs to ensure alignment with the user's perspective."
     )
     agent_beliefs: str = Field(
         description="Initial beliefs and preferences, highlighting key characteristics and tendencies that may influence their behavior"
@@ -64,8 +64,9 @@ REQUIRED INFORMATION TO GATHER:
 - Key personality traits and characteristics
 - Main interests and focus areas
 - Proficiency and knowledge level
-- Preferred interaction methods
+- Preferred interaction communication style
 - Preferred form of address
+- Ask user to set up your profile aka a preferred agent profile (gender, personality, communication style, characteristics, communication style)
 
 
 Based on the conversation flow, determine the next best question or response to gather necessary information while maintaining natural dialogue. Keep the conversation engaging and adapt based on previous responses.
@@ -122,7 +123,7 @@ Based on your analysis, construct:
    - Key personality traits and characteristics
    - Main interests and focus areas
    - Proficiency and knowledge level
-   - Preferred interaction methods
+   - Preferred interaction communication style
    - Preferred form of address
 
 2. Agent Adaptation
@@ -166,6 +167,8 @@ class AgentInitializer:
                 )
                 return
 
+            agent.history.append(Messages.User(response))
+
             # Conduct dynamic initialization conversation
             await AgentInitializer._conduct_dynamic_conversation(agent)
 
@@ -185,24 +188,24 @@ class AgentInitializer:
     @staticmethod
     async def _conduct_dynamic_conversation(agent: "BaseAgent") -> None:
         """Conduct a dynamic, natural conversation to gather user information."""
-        max_turns = 12  # Maximum conversation turns to prevent endless loops
+        max_turns = 30  # Maximum conversation turns to prevent endless loops
         turns = 0
 
         while turns < max_turns:
             # Get next question/response from the agent
-            @litellm.call(model=agent.default_model)
+            @litellm.call(model=agent.reflection_model)
             def get_next():
                 return get_next_question(history=agent.history)
 
             next_message = get_next()
 
-            # Check if we have gathered all necessary information
-            if (
-                turns >= 4
-                and "thank" in next_message.content.lower()
-                or "conclude" in next_message.content.lower()
-            ):
-                break
+            # # Check if we have gathered all necessary information
+            # if (
+            #     turns >= 4
+            #     and "thank" in next_message.content.lower()
+            #     or "conclude" in next_message.content.lower()
+            # ):
+            #     break
 
             # Send agent's message
             agent.history.append(Messages.Assistant(next_message.content))
@@ -253,7 +256,7 @@ class AgentInitializer:
             recent_goal_and_status="- Complete user profiling [Done]",
             important_context=f"- User prefers {profile.communication_style} communication\n- Technical level: {profile.technical_proficiency}",
             agent_beliefs=profile.agent_beliefs,
-            agent_info=profile.agent_info,
+            agent_info=profile.agent_background_story,
             environment_info="",
             how_to_address_user=profile.how_to_address_user,
         )
@@ -262,7 +265,7 @@ class AgentInitializer:
         agent.system_prompt = profile.system_prompt
 
         # clear history
-        agent.history = []
+        # agent.history = []
 
         agent.interface.print_system_message(
             "Agent initialized with personalized profile completed. Proceeding to the main conversation.",

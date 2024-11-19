@@ -1,9 +1,13 @@
+# Standard library imports
 from dataclasses import dataclass, field
 import hashlib
 import inspect
-import uuid
-from typing import Any, Callable, List, Optional, Type, Union
+import os
 import traceback
+import uuid
+from typing import Any, Callable, List, Optional, Type, Union, Dict, Tuple
+
+# Third-party imports
 from mirascope.core import (
     BaseDynamicConfig,
     BaseMessageParam,
@@ -13,17 +17,18 @@ from mirascope.core import (
     litellm,
     gemini,
 )
-
 from mirascope.core.openai import OpenAICallResponse
+from pydantic import ValidationError
 from tenacity import retry, stop_after_attempt, wait_exponential
 from mirascope.retries.tenacity import collect_errors
-from pydantic import ValidationError
+
+# Local imports
 from src.memory.memory_manager import MemoryManager
 from src.memory.models import ConversationSummary, MessageType, ContextMemory
 from src.memory.memory_toolkit.long_term import get_memory_toolkit
+from src.memory.memory_toolkit.note_taking import ShortTermMemoryToolKit
+from src.memory.memory_toolkit.static_flow.init_agent import AgentInitializer
 from src.util.rotating_list import RotatingList
-import os
-import pyperclip
 from src.core.prompt.tool_prompt import (
     build_prompt_from_list_tools,
     get_list_tools_name,
@@ -34,75 +39,74 @@ from src.core.prompt.system import (
     build_context_memory_prompt,
     build_recent_conversation_context,
 )
-from src.core.prompt.tool_prompt import (
-    build_prompt_from_list_tools,
-    get_list_tools_name,
-)
 from src.interface import ConsoleInterface, BaseInterface
-
 from src.core.reasoning.base import BaseReasoningEngine
-from src.memory.memory_toolkit.note_taking import ShortTermMemoryToolKit
-from src.memory.memory_toolkit.static_flow.init_agent import AgentInitializer
 
-
+# Constants
 GEMINI_SAFETY_SETTINGS = [
-    {
-        "category": "HARM_CATEGORY_HARASSMENT",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_HATE_SPEECH",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-        "threshold": "BLOCK_NONE",
-    },
+    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
 ]
+
+UPDATE_CONFIG_PREFIX = "--"
+EXIT_COMMANDS = ["exit", "quit"]
 
 
 def generate_agent_id() -> str:
+    """Generate a unique 8-character agent identifier."""
     random_id = str(uuid.uuid4())
     return hashlib.sha256(random_id.encode()).hexdigest()[:8]
 
 
 @dataclass
 class BaseAgent:
-    """Base class for all agents with memory integration."""
+    """Base class for all agents with memory integration.
 
+    This class provides core functionality for:
+    1. Agent initialization and configuration
+    2. Memory management and context handling
+    3. Tool execution and management
+    4. Conversation handling and persistence
+    5. API key rotation
+    """
+
+    # Model Configuration
     default_model: str = "gemini/gemini-1.5-flash-002"
     reflection_model: str = "gemini/gemini-1.5-pro-002"
-
-    agent_id: str = field(default_factory=generate_agent_id)
-    system_prompt: str = "You are an AI agent."
     temperature: float = 0.2
     max_retries: int = 5
 
+    # Agent Identity
+    agent_id: str = field(default_factory=generate_agent_id)
+    system_prompt: str = "You are an AI agent."
+
+    # Memory Components
     memory_manager: Optional[MemoryManager] = None
     context_memory: Optional[ContextMemory] = None
-    tools: List[Union[Type[BaseTool], Callable]] = field(default_factory=list)
-
-    reasoning_engine: Optional[BaseReasoningEngine] = None
-    short_term_memory: ShortTermMemoryToolKit | None = None
-
-    api_keys: list[str] | None = None
-    rotating_api_keys: RotatingList | None = None
-    api_key_env_var: str | None = None
-
-    conversation_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    max_history: Optional[int] = None
-    history: List[BaseMessageParam | Messages.Type | gemini.GeminiMessageParam] = field(
-        default_factory=list
-    )
-
-    interface: BaseInterface = field(default_factory=lambda: ConsoleInterface())
-
+    short_term_memory: Optional[ShortTermMemoryToolKit] = None
     recent_conversations: List[ConversationSummary] = field(default_factory=list)
     num_recent_conversations: int = 4
+
+    # Tool Management
+    tools: List[Union[Type[BaseTool], Callable]] = field(default_factory=list)
+    reasoning_engine: Optional[BaseReasoningEngine] = None
+
+    # API Configuration
+    api_keys: Optional[List[str]] = None
+    rotating_api_keys: Optional[RotatingList] = None
+    api_key_env_var: Optional[str] = None
+
+    # Conversation State
+    conversation_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    max_history: Optional[int] = None
+    history: List[Union[BaseMessageParam, Messages.Type, gemini.GeminiMessageParam]] = (
+        field(default_factory=list)
+    )
+
+    # Interface
+    interface: BaseInterface = field(default_factory=lambda: ConsoleInterface())
 
     def __post_init__(self) -> None:
         """Initialize the agent after dataclass initialization."""
@@ -110,35 +114,48 @@ class BaseAgent:
         self._setup_api_keys()
         self._initialize_tools()
 
+    # Initialization Methods
     def _initialize_agent(self) -> None:
-        """Print initial agent configuration."""
-        self.interface.print_system_message(f"Agent ID: {self.agent_id}")
-        self.interface.print_system_message(f"Default Model: {self.default_model}")
-        self.interface.print_system_message(f"Slow Model: {self.reflection_model}")
-        self.interface.print_system_message(f"Temperature: {self.temperature}")
+        """Initialize agent configuration and print initial setup information."""
+        self._print_initialization_info()
+        self._initialize_short_term_memory()
+
+    def _print_initialization_info(self) -> None:
+        """Print agent configuration details."""
+        config_info = {
+            "Agent ID": self.agent_id,
+            "Default Model": self.default_model,
+            "Slow Model": self.reflection_model,
+            "Temperature": self.temperature,
+        }
 
         if self.reasoning_engine:
-            self.interface.print_system_message(
-                f"Reasoning Engine: {self.reasoning_engine.__class__.__name__}"
-            )
+            config_info["Reasoning Engine"] = self.reasoning_engine.__class__.__name__
 
+        for key, value in config_info.items():
+            self.interface.print_system_message(f"{key}: {value}")
+
+    def _initialize_short_term_memory(self) -> None:
+        """Initialize the short-term memory component."""
         self.short_term_memory = ShortTermMemoryToolKit(save_path=self.agent_id)
         self.short_term_memory._initialize()
 
     def _setup_api_keys(self) -> None:
-        """Setup API key rotation if configured."""
-        if self.api_keys:
-            if not self.api_key_env_var:
-                raise ValueError("Api key env var is not set")
+        """Configure API key rotation if multiple keys are provided."""
+        if not self.api_keys:
+            return
 
-            self.interface.print_system_message(
-                f"Rotating through {len(self.api_keys)} api keys"
-            )
-            self.interface.print_system_message(f"Api env var: {self.api_key_env_var}")
-            self.rotating_api_keys = RotatingList(self.api_keys)
+        if not self.api_key_env_var:
+            raise ValueError("API key environment variable not set")
+
+        self.interface.print_system_message(
+            f"Rotating through {len(self.api_keys)} api keys"
+        )
+        self.interface.print_system_message(f"Api env var: {self.api_key_env_var}")
+        self.rotating_api_keys = RotatingList(self.api_keys)
 
     def _initialize_tools(self) -> None:
-        """Initialize tools and memory toolkit."""
+        """Initialize memory toolkit and available tools."""
         if self.memory_manager:
             dynamic_toolkit = get_memory_toolkit(self.memory_manager)
             self.add_tools(dynamic_toolkit.create_tools())
@@ -147,24 +164,22 @@ class BaseAgent:
         if self.short_term_memory:
             self.add_tools(self.short_term_memory.create_tools())
 
-    def rotate_api_key(self) -> None:
-        """Rotate the api key."""
-        if self.rotating_api_keys:
-            if self.api_key_env_var:
-                api_key = self.rotating_api_keys.rotate()
-                os.environ[self.api_key_env_var] = str(api_key)
-
-                # self.interface.print_system_message(
-                #     f"Current api key: {os.environ[self.api_key_env_var]}"
-                # )
-
+    # Tool Management Methods
     def add_tools(self, tools: List[Union[Type[BaseTool], Callable]]) -> None:
+        """Add new tools to the agent's toolkit."""
         self.tools.extend(tools)
 
     def get_tools(self) -> List[Union[Type[BaseTool], Callable]]:
         """Get the list of tools available to this agent."""
         return self.tools
 
+    def rotate_api_key(self) -> None:
+        """Rotate to the next available API key if multiple keys are configured."""
+        if self.rotating_api_keys and self.api_key_env_var:
+            api_key = self.rotating_api_keys.rotate()
+            os.environ[self.api_key_env_var] = str(api_key)
+
+    # Prompt Building and Message Handling
     async def initialize_conversation(self) -> None:
         """Initialize conversation by loading best prompt and short-term memory."""
         self.interface.print_system_message("Initializing conversation...")
@@ -242,53 +257,70 @@ class BaseAgent:
         include_memories_prompt: bool = True,
         include_recent_conversation_context: bool = True,
     ) -> BaseDynamicConfig:
-        """Build the prompt for the agent using the current state."""
-        system_prompt = (
-            build_system_prompt(self, self.recent_conversations)
-            if include_system_prompt
-            else ""
-        )
-        context_memory_prompt = (
-            build_context_memory_prompt(self) if include_context_memory else ""
-        )
+        """Build the prompt for the agent using the current state.
 
-        history = self.history if include_history else []
-        tools_prompt = (
-            build_prompt_from_list_tools(self.get_tools())
-            if include_tools_prompt and self.get_tools()
-            else ""
-        )
+        Args:
+            include_history: Whether to include conversation history
+            include_context_memory: Whether to include context memory
+            include_system_prompt: Whether to include system prompt
+            include_tools_prompt: Whether to include available tools
+            include_memories_prompt: Whether to include short-term memories
+            include_recent_conversation_context: Whether to include recent conversations
 
-        memories_prompt = (
-            self.short_term_memory.format_memories() if include_memories_prompt else ""
-        )
-
-        recent_conversation_context = (
-            build_recent_conversation_context(self.recent_conversations)
-            if include_recent_conversation_context
-            else ""
-        )
-
-        return {
-            "computed_fields": {
-                "system_prompt": system_prompt,
-                "context_memory_prompt": context_memory_prompt,
-                "history": history,
-                "tools_prompt": tools_prompt,
-                "memories_prompt": memories_prompt,
-                "recent_conversation_context": recent_conversation_context,
-            }
+        Returns:
+            BaseDynamicConfig: The constructed prompt configuration
+        """
+        computed_fields = {
+            "system_prompt": (
+                build_system_prompt(self, self.recent_conversations)
+                if include_system_prompt
+                else ""
+            ),
+            "context_memory_prompt": (
+                build_context_memory_prompt(self) if include_context_memory else ""
+            ),
+            "history": self.history if include_history else [],
+            "tools_prompt": (
+                build_prompt_from_list_tools(self.get_tools())
+                if include_tools_prompt and self.get_tools()
+                else ""
+            ),
+            "memories_prompt": (
+                self.short_term_memory.format_memories()
+                if include_memories_prompt
+                else ""
+            ),
+            "recent_conversation_context": (
+                build_recent_conversation_context(self.recent_conversations)
+                if include_recent_conversation_context
+                else ""
+            ),
         }
 
+        return {"computed_fields": computed_fields}
+
     async def _assitant_turn_message(self, message: BaseMessageParam) -> None:
+        """Process and store an assistant's message in the conversation history.
+
+        Args:
+            message: The message from the assistant to process
+        """
         self.history.append(message)
         await self.store_turn_message(message, "assistant")
 
     @litellm.call(model=default_model, call_params={"temperature": temperature})
     def _default_call(
-        self, query: BaseMessageParam | None = None, include_tools: bool = True
+        self, query: Optional[BaseMessageParam] = None, include_tools: bool = True
     ) -> BaseDynamicConfig:
-        """Default call to the agent with the current state and context history."""
+        """Make a default call to the agent with the current state and context history.
+
+        Args:
+            query: Optional query to include in the call
+            include_tools: Whether to include available tools
+
+        Returns:
+            BaseDynamicConfig: The configuration for the call
+        """
         messages = self._build_prompt()
         tools = self.get_tools() if include_tools else []
         self.rotate_api_key()
@@ -301,11 +333,21 @@ class BaseAgent:
             "tools": tools,
         }
 
-    async def _process_tools(self, tools: List[BaseTool], response: OpenAICallResponse):
-        """Process and execute tools called by the agent."""
+    async def _process_tools(
+        self, tools: List[BaseTool], response: OpenAICallResponse
+    ) -> List:
+        """Process and execute tools called by the agent.
+
+        Args:
+            tools: List of tools to execute
+            response: The response from the agent
+
+        Returns:
+            List: Messages from tool executions
+        """
         tools_and_outputs = []
         self.interface.print_system_message(
-            f"Agent is executing tools: {get_list_tools_name(tools)}"  # type: ignore
+            f"Agent is executing tools: {get_list_tools_name(tools)}"
         )
 
         for tool in tools:
@@ -320,17 +362,27 @@ class BaseAgent:
         return tool_messages
 
     async def _execute_tool(self, tool: BaseTool) -> Any:
-        """Execute a single tool and handle its output."""
+        """Execute a single tool and handle its output.
+
+        Args:
+            tool: The tool to execute
+
+        Returns:
+            Any: The output from the tool execution
+
+        Raises:
+            ValidationError: If tool input validation fails
+            Exception: If tool execution fails
+        """
         self.interface.print_system_message(
             f"Calling Tool '{tool._name()}' with args {tool.args}"
         )
         try:
-            # if tool is async, it will be called as await tool.call()
-            if inspect.iscoroutinefunction(tool.call):
-                output = await tool.call()
-            else:
-                output = tool.call()
-
+            output = (
+                await tool.call()
+                if inspect.iscoroutinefunction(tool.call)
+                else tool.call()
+            )
             self.interface.print_system_message(f"Tool output: {output}")
             return output
         except ValidationError as e:
@@ -348,56 +400,59 @@ class BaseAgent:
         after=collect_errors(ValidationError),
     )
     async def _default_step(
-        self, include_tools: bool = True, *, errors: list[ValidationError] | None = None
-    ) -> tuple[bool, OpenAICallResponse]:
-        """Execute the default step of the agent. With current state and context history. Return True if the step agent use tool call."""
-        use_tool_call = False
-        correct_action_query = None
+        self,
+        include_tools: bool = True,
+        *,
+        errors: Optional[List[ValidationError]] = None,
+    ) -> Tuple[bool, OpenAICallResponse]:
+        """Execute the default step of the agent with current state and context history.
 
+        Args:
+            include_tools: Whether to include tools in the step
+            errors: Optional list of validation errors from previous attempts
+
+        Returns:
+            Tuple[bool, OpenAICallResponse]: Whether tools were used and the response
+        """
         if errors:
-
-            correct_action_query = Messages.User(
+            error_message = Messages.User(
                 inspect.cleandoc(
                     f"""
-                system@noreply: ERROR:
-                There are some error in the last step when indicate that you pass the wrong parameters when use tool. 
-                Error: <> {format_error_message(errors)} </>."
-                Correct the parameters indicated in the error message and re-execute the action immediately without further discussion.
-                """
+                    system@noreply: ERROR:
+                    There are some errors in the last step when indicating that you passed wrong parameters when using tools. 
+                    Error: <> {format_error_message(errors)} </>
+                    Correct the parameters indicated in the error message and re-execute the action immediately without further discussion.
+                    """
                 )
             )
-            self.history.append(correct_action_query)
-            self.interface.print_user_message(correct_action_query.content)
-            await self.store_turn_message(correct_action_query, "user")
+            self.history.append(error_message)
+            self.interface.print_user_message(error_message.content)
+            await self.store_turn_message(error_message, "user")
 
-        # response call
-        response = self._default_call(include_tools=include_tools)  # type: ignore
+        response = self._default_call(include_tools=include_tools)
         self.interface.print_agent_message(response.content)
-        # store agent response to history
-        await self._assitant_turn_message(response.message_param)  # type: ignore
+        await self._assitant_turn_message(response.message_param)
 
-        # tool call
         if response.tools:
-            tool_output_messages = await self._process_tools(
-                response.tools, response
-            )  # type: ignore
-            # store message to history before tool, make sure the tool call is successful before add to history
-            self.history.extend(tool_output_messages)  # type: ignore
-            use_tool_call = True
+            tool_output_messages = await self._process_tools(response.tools, response)
+            self.history.extend(tool_output_messages)
+            return True, response
 
-        return use_tool_call, response
+        return False, response
 
-    async def step(
-        self,
-        query: Messages.Type,
-    ):
-        """Execute one step of the agent's reasoning process."""
+    async def step(self, query: Messages.Type) -> Optional[str]:
+        """Execute one step of the agent's reasoning process.
+
+        Args:
+            query: The input query to process
+
+        Returns:
+            Optional[str]: Error message if an error occurred
+        """
         try:
-
             await self.store_turn_message(query, "user")
             self.history.append(query)
 
-            # reasoning loop
             if self.reasoning_engine:
                 await self.reasoning_engine.run(self)
             else:
@@ -406,87 +461,87 @@ class BaseAgent:
                     return await self.step(Messages.User(""))
 
         except Exception as e:
-            self.interface.print_system_message(
-                f"Error in agent step: {e}. Traceback: {traceback.format_exc()}",
-                type="error",
-            )
+            error_msg = f"Error in agent step: {e}. Traceback: {traceback.format_exc()}"
+            self.interface.print_system_message(error_msg, type="error")
             return str(e)
 
-    def update_config(self, config_str: str) -> None:
-        """Update the agent's configuration."""
-        parameters = config_str.split(" ")
-        if len(parameters) == 2:
-            key, value = parameters
+        return None
 
+    def update_config(self, config_str: str) -> None:
+        """Update the agent's configuration.
+
+        Args:
+            config_str: Configuration string in the format "key value"
+        """
+        try:
+            key, value = config_str.split(" ", 1)
             setattr(self.reasoning_engine, key, value)
             self.interface.print_system_message(
                 f"Updated {key} to {value}", type="info"
+            )
+        except ValueError:
+            self.interface.print_system_message(
+                "Invalid config format. Use: 'key value'", type="error"
+            )
+        except AttributeError:
+            self.interface.print_system_message(
+                f"No reasoning engine available or invalid attribute: {key}",
+                type="error",
             )
 
     async def run(self) -> None:
         """Run the agent in an interactive loop."""
         try:
             await self.initialize_conversation()
-
             self.interface.print_system_message(
                 "Type exit or quit to end the conversation."
             )
 
-            update_config_prefix = "--"
-
             while True:
                 query = self.interface.input("[User]: ")
 
-                while query.startswith(update_config_prefix):
-                    query = query[len(update_config_prefix) :]
-                    self.update_config(query)
+                if query.startswith(UPDATE_CONFIG_PREFIX):
+                    self.update_config(query[len(UPDATE_CONFIG_PREFIX) :])
+                    continue
 
-                    query = self.interface.input("[User]: ")
-
-                if query.lower() in ["exit", "quit"]:
+                if query.lower() in EXIT_COMMANDS:
                     break
 
-                query = Messages.User(query)
-                await self.step(query)
+                await self.step(Messages.User(query))
 
         except Exception as e:
-            self.interface.print_system_message(
-                f"Error in run: {e}. Traceback: {traceback.format_exc()}", type="error"
-            )
-            raise e
+            error_msg = f"Error in run: {e}. Traceback: {traceback.format_exc()}"
+            self.interface.print_system_message(error_msg, type="error")
+            raise
         finally:
-            self.interface.print_history(self.history)
+            await self._handle_conversation_end()
 
-            if self.memory_manager:
-                if len(self.history) >= 6:
-                    user_feedback = self.interface.input(
-                        f"Please provide your feedback for the conversation with {self.agent_id}: "
-                    )
-                    await self.memory_manager.reflection_conversation(user_feedback)
+    async def _handle_conversation_end(self) -> None:
+        """Handle tasks that need to be performed when a conversation ends."""
+        self.interface.print_history(self.history)
+
+        if self.memory_manager and len(self.history) >= 6:
+            user_feedback = self.interface.input(
+                f"Please provide your feedback for the conversation with {self.agent_id}: "
+            )
+            await self.memory_manager.reflection_conversation(user_feedback)
 
     def norm_message_type(
         self,
-        message: (
-            BaseMessageParam | Messages.Type | str | dict | gemini.GeminiMessageParam
-        ),
+        message: Union[
+            BaseMessageParam, Messages.Type, str, dict, gemini.GeminiMessageParam
+        ],
         role: str,
     ) -> BaseMessageParam:
+        """Normalize different message types into a BaseMessageParam.
 
-        # if isinstance(message, BaseMessageParam):
-        #     return message
+        Args:
+            message: The message to normalize
+            role: The role of the message sender
 
-        # if isinstance(message, dict):
-        #     if role.lower() != "tool":
-        #         return BaseMessageParam(
-        #             role=role,
-        #             content=str(message["content"]),
-        #         )
-        #     else:
-        #         return BaseMessageParam(
-        #             role=role,
-        #             content=str(message["tool_calls"]),
-        #         )
-
+        Returns:
+            BaseMessageParam: The normalized message
+        """
         content = getattr(message, "content", None)
         if content is None:
             content = getattr(message, "parts", None)
@@ -501,22 +556,23 @@ class BaseAgent:
 
     async def store_turn_message(
         self,
-        message: Messages.Type | str | dict,
+        message: Union[Messages.Type, str, dict],
         role: str = "assistant",
         message_type: MessageType = MessageType.TEXT,
     ) -> None:
-        """Store a single turn message in database."""
-        if self.memory_manager:
-            try:
-                message = self.norm_message_type(message, role)
-            except Exception as e:
-                self.interface.print_system_message(
-                    f"Error converting message to base message param: {e}. Message: {message}",
-                    type="error",
-                )
-                return
+        """Store a single turn message in the database.
 
-            if not message.content or len(message.content) == 0:
+        Args:
+            message: The message to store
+            role: The role of the message sender
+            message_type: The type of the message
+        """
+        if not self.memory_manager:
+            return
+
+        try:
+            message = self.norm_message_type(message, role)
+            if not message.content:
                 return
 
             await self.memory_manager.store_conversation(
@@ -525,21 +581,30 @@ class BaseAgent:
                 message_type=message_type,
                 conversation_id=self.conversation_id,
             )
+        except Exception as e:
+            self.interface.print_system_message(
+                f"Error storing message: {e}. Message: {message}", type="error"
+            )
 
     async def _store_tool_interactions(self, messages: List) -> None:
-        """Store tool interactions in database."""
-        if self.memory_manager:
+        """Store tool interactions in the database.
 
-            for msg in messages:
-                try:
-                    msg = self.norm_message_type(msg, "tool")
-                    await self.memory_manager.store_conversation(
-                        sender="tool",
-                        message_content=str(msg.content),
-                        message_type=MessageType.TOOL,
-                        conversation_id=self.conversation_id,
-                    )
-                except Exception as e:
-                    self.interface.print_system_message(
-                        f"Error storing tool interaction: {e}", type="error"
-                    )
+        Args:
+            messages: List of tool interaction messages to store
+        """
+        if not self.memory_manager:
+            return
+
+        for msg in messages:
+            try:
+                msg = self.norm_message_type(msg, "tool")
+                await self.memory_manager.store_conversation(
+                    sender="tool",
+                    message_content=str(msg.content),
+                    message_type=MessageType.TOOL,
+                    conversation_id=self.conversation_id,
+                )
+            except Exception as e:
+                self.interface.print_system_message(
+                    f"Error storing tool interaction: {e}", type="error"
+                )

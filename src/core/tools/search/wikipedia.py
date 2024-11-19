@@ -25,13 +25,13 @@ class WikipediaSearchContentTool(BaseTool):
                 return f"No Wikipedia articles found for '{self.query}'"
 
             # Get the most relevant page
-            try:
-                page = wikipedia.page(search_results[0], auto_suggest=False)
-            except wikipedia.DisambiguationError as e:
-                # If we hit a disambiguation page, take the first option
-                page = wikipedia.page(e.options[0], auto_suggest=False)
+            # try:
+            #     page = wikipedia.page(search_results[0], auto_suggest=False)
+            # except wikipedia.DisambiguationError as e:
+            #     # If we hit a disambiguation page, take the first option
+            #     page = wikipedia.page(e.options[0], auto_suggest=False)
 
-            return page.content
+            # return page.content
 
             # Get the summary with specified number of sentences
             return wikipedia.summary(

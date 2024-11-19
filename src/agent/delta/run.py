@@ -47,7 +47,6 @@ class Delta3000(BaseAgent):
             [
                 DuckDuckGoSearchTool,
                 WebReaderTool,
-                WikipediaSearchContentTool,
             ]
         )
         self.add_tools(FileManagerToolkit().create_tools())
