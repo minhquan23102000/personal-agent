@@ -24,14 +24,14 @@ class UserProfile(BaseModel):
         description="Assessment of user's technical knowledge and comfort level"
     )
     interaction_preferences: str = Field(
-        description="How the user prefers to receive information and interact"
+        description="Provide tips for enhancing communication skills, focusing on preferred styles, language choices, and tone adjustments that resonate with different audiences."
     )
     how_to_address_user: str = Field(description="How the user prefers to be addressed")
     agent_background_story: str = Field(
         description="Craft a compelling background story for an agent that reflects the user's values and preferences, highlighting their motivations, experiences, and core beliefs to ensure alignment with the user's perspective."
     )
     agent_beliefs: str = Field(
-        description="Initial beliefs and preferences, highlighting key characteristics and tendencies that may influence their behavior"
+        description="Initial beliefs emphasizing the key characteristics and tendencies that shape behavior and decision-making."
     )
     system_prompt: str = Field(
         description="Develop an initial system prompt that clearly outlines the agent's purpose, key functionalities, and any initial instructions."
