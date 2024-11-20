@@ -11,7 +11,6 @@ import os
 from pathlib import Path
 
 
-
 @dataclass
 class Note:
     content: str
@@ -38,21 +37,21 @@ class ShortTermMemoryToolKit(BaseToolKit):
     memories: dict[str, Note] = Field(default_factory=dict)
     memory_file: Path = Field(default=None)
     tokenizer: Any = Field(default=None)
-    
+
     # Configuration for memory management
     max_token_size: int = 25_000  # Maximum total tokens in short-term memory
-    memory_decay_hours: int = 24*7  # Memories older than this will be removed
+    memory_decay_hours: int = 24 * 7  # Memories older than this will be removed
     encoding_model: str = "cl100k_base"  # OpenAI's encoding model
 
     def _initialize(self):
         if self.memory_file is None:
-            self.memory_file = Path(DATA_DIR) / self.save_path / "short_term_memory.json"
+            self.memory_file = (
+                Path(DATA_DIR) / self.save_path / "short_term_memory.json"
+            )
         if self.tokenizer is None:
             self.tokenizer = tiktoken.get_encoding(self.encoding_model)
         self.load_memories()  # Load memories on initialization
-        
-            
-        
+
     def _get_total_tokens(self) -> int:
         """Calculate total tokens in all memories."""
         total_tokens = 0
@@ -65,9 +64,9 @@ class ShortTermMemoryToolKit(BaseToolKit):
         """Store or update a piece of information in memory.
 
         Args:
-            self: self
-            key: A descriptive label for this memory (e.g., 'user_name', 'task_{name}_goal')
-            content: The information to remember
+            self: self.
+            key: A descriptive label for this memory (e.g., 'user_name', 'task_{name}_goal').
+            content: The information to remember.
         """
         self.memories[key] = Note(content=content)
         self.save_memories()
@@ -106,16 +105,19 @@ class ShortTermMemoryToolKit(BaseToolKit):
         """Apply memory decay and token size limits."""
         current_time = datetime.now()
         decay_threshold = current_time - timedelta(hours=self.memory_decay_hours)
-        
+
         # Remove old memories
         self.memories = {
-            key: note for key, note in self.memories.items()
+            key: note
+            for key, note in self.memories.items()
             if note.timestamp > decay_threshold
         }
-        
+
         # If still over token limit, remove oldest memories until under limit
         while self._get_total_tokens() > self.max_token_size and self.memories:
-            oldest_key = min(self.memories.keys(), key=lambda k: self.memories[k].timestamp)
+            oldest_key = min(
+                self.memories.keys(), key=lambda k: self.memories[k].timestamp
+            )
             del self.memories[oldest_key]
 
     def format_memories(self) -> str:
