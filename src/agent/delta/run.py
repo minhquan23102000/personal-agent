@@ -23,7 +23,8 @@ from src.core.tools.search import (
     WebReaderTool,
 )
 from src.core.tools.files.file_manager_toolkit import FileManagerToolkit
-from src.core.reasoning.react import ReactEngine
+from src.core.reasoning.react import ReActEngine
+from src.core.reasoning.chat import ChatEngine
 
 SYSTEM_PROMPT_PATH = Path(__file__).parent / "inital_system_prompt.md"
 
@@ -38,11 +39,24 @@ class Delta3000(BaseAgent):
     api_keys: list[str] = field(default_factory=lambda: GOOGLE_API_KEY_LIST)
 
     def __post_init__(self):
-        self.memory_manager = MemoryManager(db_uri=self.agent_id)
-        self.reasoning_engine = ReactEngine(
-            max_retries=self.max_retries, model_name=self.reflection_model, max_deep=10
-        )
+        self.memory_manager = MemoryManager(
+            db_uri=self.agent_id
+        )  # override defaulut before super init
         super().__post_init__()
+
+        chat_engine = ChatEngine(
+            model_name=self.default_model, temperature=self.temperature
+        )
+        reasoning_engine = ReActEngine(
+            model_name=self.reflection_model, max_retries=self.max_retries, max_deep=12
+        )
+
+        # register engines
+        self.state_manager.register_list_engines([chat_engine, reasoning_engine])
+
+        # set defauult chat engine
+        self.state_manager.chat_config.current_engine = chat_engine
+
         self.add_tools(
             [
                 DuckDuckGoSearchTool,

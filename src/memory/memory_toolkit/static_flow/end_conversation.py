@@ -138,7 +138,7 @@ async def reflection_conversation(
             recent_goal_and_status=memory_updates.recent_goal_and_status,
             important_context=memory_updates.important_context,
             agent_beliefs=memory_updates.agent_beliefs,
-            agent_info=memory_updates.agent_info,
+            agent_info=memory_updates.agent_background,
             environment_info=memory_updates.environment_info,
             how_to_address_user=memory_updates.how_to_address_user,
         )

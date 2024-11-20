@@ -9,6 +9,10 @@ import json
 from datetime import datetime, timedelta
 import os
 from pathlib import Path
+from src.memory.memory_toolkit.static_flow.save_long_term import save_long_term_memory
+
+if TYPE_CHECKING:
+    from src.agent.base_agent import BaseAgent
 
 
 @dataclass
@@ -33,20 +37,24 @@ class ShortTermMemoryToolKit(BaseToolKit):
 
     __namespace__ = "memory_short_term"
 
-    save_path: str
+    agent: Any = Field(default=None)
     memories: dict[str, Note] = Field(default_factory=dict)
     memory_file: Path = Field(default=None)
     tokenizer: Any = Field(default=None)
 
     # Configuration for memory management
     max_token_size: int = 25_000  # Maximum total tokens in short-term memory
-    memory_decay_hours: int = 24 * 7  # Memories older than this will be removed
+    memory_decay_hours: int = 24 * 30  # Memories older than this will be removed
     encoding_model: str = "cl100k_base"  # OpenAI's encoding model
+
+    def set_agent(self, agent: Any) -> None:
+        """Set the agent after initialization to avoid circular imports."""
+        self.agent: BaseAgent = agent
 
     def _initialize(self):
         if self.memory_file is None:
             self.memory_file = (
-                Path(DATA_DIR) / self.save_path / "short_term_memory.json"
+                Path(DATA_DIR) / self.agent.agent_id / "short_term_memory.json"
             )
         if self.tokenizer is None:
             self.tokenizer = tiktoken.get_encoding(self.encoding_model)
@@ -60,7 +68,7 @@ class ShortTermMemoryToolKit(BaseToolKit):
         return total_tokens
 
     @toolkit_tool
-    async def remember(self, key: str, content: str) -> str:
+    def remember(self, key: str, content: str) -> str:
         """Store or update a piece of information in memory.
 
         Args:
@@ -69,15 +77,14 @@ class ShortTermMemoryToolKit(BaseToolKit):
             content: The information to remember.
         """
         self.memories[key] = Note(content=content)
-        self.save_memories()
 
         return f"Remembered: {key}"
 
-    def save_memories(self) -> None:
+    async def save_memories(self) -> None:
         """Save memories to disk."""
         self.memory_file.parent.mkdir(parents=True, exist_ok=True)
 
-        self._apply_memory_management()
+        await self._apply_memory_management()
 
         memory_data = {key: note.to_dict() for key, note in self.memories.items()}
 
@@ -101,10 +108,17 @@ class ShortTermMemoryToolKit(BaseToolKit):
             logger.error(f"Error loading memories: {e}")
             self.memories = {}
 
-    def _apply_memory_management(self):
+    async def _apply_memory_management(self):
         """Apply memory decay and token size limits."""
         current_time = datetime.now()
         decay_threshold = current_time - timedelta(hours=self.memory_decay_hours)
+
+        # old memories
+        old_memories = {
+            key: note
+            for key, note in self.memories.items()
+            if note.timestamp < decay_threshold
+        }
 
         # Remove old memories
         self.memories = {
@@ -118,14 +132,23 @@ class ShortTermMemoryToolKit(BaseToolKit):
             oldest_key = min(
                 self.memories.keys(), key=lambda k: self.memories[k].timestamp
             )
+            # store to old memories
+            old_memories[oldest_key] = self.memories[oldest_key]
             del self.memories[oldest_key]
+
+        # store to longterm
+        await save_long_term_memory(
+            agent=self.agent,
+            additional_context=self.format_memories(),
+            include_message_history=False,
+        )
 
     def format_memories(self) -> str:
         """Format all memories for inclusion in system prompt."""
         if not self.memories:
             return "No memories stored."
 
-        formatted = "Current memories:\n"
+        formatted = "\n"
         for key, note in self.memories.items():
             formatted += f"- {key}: {note.content}\n"
         return formatted

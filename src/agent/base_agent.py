@@ -26,7 +26,7 @@ from mirascope.retries.tenacity import collect_errors
 from src.memory.memory_manager import MemoryManager
 from src.memory.models import ConversationSummary, MessageType, ContextMemory
 from src.memory.memory_toolkit.long_term import get_memory_toolkit
-from src.memory.memory_toolkit.note_taking import ShortTermMemoryToolKit
+from src.memory.memory_toolkit.short_term import ShortTermMemoryToolKit
 from src.memory.memory_toolkit.static_flow.init_agent import AgentInitializer
 from src.util.rotating_list import RotatingList
 from src.core.prompt.tool_prompt import (
@@ -41,6 +41,7 @@ from src.core.prompt.system import (
 )
 from src.interface import ConsoleInterface, BaseInterface
 from src.core.reasoning.base import BaseReasoningEngine
+from src.core.tools.state_mangement import StateManagementToolKit, AgentStateManager
 
 # Constants
 GEMINI_SAFETY_SETTINGS = [
@@ -91,7 +92,6 @@ class BaseAgent:
 
     # Tool Management
     tools: List[Union[Type[BaseTool], Callable]] = field(default_factory=list)
-    reasoning_engine: Optional[BaseReasoningEngine] = None
 
     # API Configuration
     api_keys: Optional[List[str]] = None
@@ -107,6 +107,9 @@ class BaseAgent:
 
     # Interface
     interface: BaseInterface = field(default_factory=lambda: ConsoleInterface())
+
+    # State Management
+    state_manager: AgentStateManager = field(default_factory=AgentStateManager)
 
     def __post_init__(self) -> None:
         """Initialize the agent after dataclass initialization."""
@@ -127,17 +130,16 @@ class BaseAgent:
             "Default Model": self.default_model,
             "Slow Model": self.reflection_model,
             "Temperature": self.temperature,
+            "List of Chat Engines": self.state_manager.chat_config.registry.list_engines(),
         }
-
-        if self.reasoning_engine:
-            config_info["Reasoning Engine"] = self.reasoning_engine.__class__.__name__
 
         for key, value in config_info.items():
             self.interface.print_system_message(f"{key}: {value}")
 
     def _initialize_short_term_memory(self) -> None:
         """Initialize the short-term memory component."""
-        self.short_term_memory = ShortTermMemoryToolKit(save_path=self.agent_id)
+        self.short_term_memory = ShortTermMemoryToolKit()
+        self.short_term_memory.set_agent(self)
         self.short_term_memory._initialize()
 
     def _setup_api_keys(self) -> None:
@@ -156,6 +158,9 @@ class BaseAgent:
 
     def _initialize_tools(self) -> None:
         """Initialize memory toolkit and available tools."""
+        state_toolkit = StateManagementToolKit(state_manager=self.state_manager)
+        self.add_tools(state_toolkit.create_tools())
+
         if self.memory_manager:
             dynamic_toolkit = get_memory_toolkit(self.memory_manager)
             self.add_tools(dynamic_toolkit.create_tools())
@@ -197,7 +202,6 @@ class BaseAgent:
 
         # Continue with existing initialization...
         reflection_performed = await self.memory_manager.check_and_perform_reflection()
-        self.conversation_id = str(uuid.uuid4())
 
         # Load latest summary for system prompt
         latest_summary = await self.memory_manager.get_latest_conversation_summary()
@@ -225,23 +229,27 @@ class BaseAgent:
         """
         SYSTEM: 
         
-        # SYSTEM INSTRUCTIONS
+        # INSTRUCTIONS
         
         {system_prompt}
         
-        # AGENT'S SHORT-TERM MEMORY:
+        # SHORT-TERM MEMORY
         
         {memories_prompt}
         
-        # CONTEXT MEMORY (IMPORTANT INFORMATION AND CONTEXT FOR THE AGENT)
+        # CONTEXT MEMORY 
         
         {context_memory_prompt}
         
-        # RECENT CONVERSATION SUMMARY
+        ## RECENT CONVERSATION SUMMARY
         
         {recent_conversation_context}
         
-        # AVAILABLE TOOLS (REMEMBER TO USE THEM WHEN NECESSARY): 
+        # CHAT MODE STATE
+        
+        {state_prompt}
+        
+        # AVAILABLE TOOLS: 
         
         {tools_prompt}
         
@@ -256,20 +264,9 @@ class BaseAgent:
         include_tools_prompt: bool = True,
         include_memories_prompt: bool = True,
         include_recent_conversation_context: bool = True,
+        include_state_prompt: bool = True,
     ) -> BaseDynamicConfig:
-        """Build the prompt for the agent using the current state.
-
-        Args:
-            include_history: Whether to include conversation history
-            include_context_memory: Whether to include context memory
-            include_system_prompt: Whether to include system prompt
-            include_tools_prompt: Whether to include available tools
-            include_memories_prompt: Whether to include short-term memories
-            include_recent_conversation_context: Whether to include recent conversations
-
-        Returns:
-            BaseDynamicConfig: The constructed prompt configuration
-        """
+        """Build the prompt for the agent using the current state."""
         computed_fields = {
             "system_prompt": (
                 build_system_prompt(self, self.recent_conversations)
@@ -287,13 +284,16 @@ class BaseAgent:
             ),
             "memories_prompt": (
                 self.short_term_memory.format_memories()
-                if include_memories_prompt
+                if include_memories_prompt and self.short_term_memory
                 else ""
             ),
             "recent_conversation_context": (
                 build_recent_conversation_context(self.recent_conversations)
                 if include_recent_conversation_context
                 else ""
+            ),
+            "state_prompt": (
+                self.state_manager.format_state() if include_state_prompt else ""
             ),
         }
 
@@ -308,10 +308,9 @@ class BaseAgent:
         self.history.append(message)
         await self.store_turn_message(message, "assistant")
 
-    @litellm.call(model=default_model, call_params={"temperature": temperature})
-    def _default_call(
+    async def _default_call(
         self, query: Optional[BaseMessageParam] = None, include_tools: bool = True
-    ) -> BaseDynamicConfig:
+    ):
         """Make a default call to the agent with the current state and context history.
 
         Args:
@@ -321,6 +320,7 @@ class BaseAgent:
         Returns:
             BaseDynamicConfig: The configuration for the call
         """
+
         messages = self._build_prompt()
         tools = self.get_tools() if include_tools else []
         self.rotate_api_key()
@@ -328,10 +328,20 @@ class BaseAgent:
         if query:
             messages.append(query)
 
-        return {
-            "messages": messages,
-            "tools": tools,
-        }
+        @litellm.call(
+            model=self.default_model, call_params={"temperature": self.temperature}
+        )
+        async def call(
+            *, errors: list[ValidationError] | None = None
+        ) -> BaseDynamicConfig:
+            self.rotate_api_key()
+
+            return {
+                "messages": messages,
+                "tools": tools,
+            }
+
+        return await call()
 
     async def _process_tools(
         self, tools: List[BaseTool], response: OpenAICallResponse
@@ -418,7 +428,7 @@ class BaseAgent:
             error_message = Messages.User(
                 inspect.cleandoc(
                     f"""
-                    system@noreply: ERROR:
+                    system-automessage@noreply: ERROR:
                     There are some errors in the last step when indicating that you passed wrong parameters when using tools. 
                     Error: <> {format_error_message(errors)} </>
                     Correct the parameters indicated in the error message and re-execute the action immediately without further discussion.
@@ -429,7 +439,7 @@ class BaseAgent:
             self.interface.print_user_message(error_message.content)
             await self.store_turn_message(error_message, "user")
 
-        response = self._default_call(include_tools=include_tools)
+        response = await self._default_call(include_tools=include_tools)
         self.interface.print_agent_message(response.content)
         await self._assitant_turn_message(response.message_param)
 
@@ -441,20 +451,15 @@ class BaseAgent:
         return False, response
 
     async def step(self, query: Messages.Type) -> Optional[str]:
-        """Execute one step of the agent's reasoning process.
-
-        Args:
-            query: The input query to process
-
-        Returns:
-            Optional[str]: Error message if an error occurred
-        """
+        """Execute one step of the agent's reasoning process."""
         try:
             await self.store_turn_message(query, "user")
             self.history.append(query)
 
-            if self.reasoning_engine:
-                await self.reasoning_engine.run(self)
+            current_engine = self.state_manager.chat_config.current_engine
+
+            if current_engine:
+                await current_engine.run(self)
             else:
                 use_tool_call, response = await self._default_step()
                 if use_tool_call:
@@ -467,28 +472,6 @@ class BaseAgent:
 
         return None
 
-    def update_config(self, config_str: str) -> None:
-        """Update the agent's configuration.
-
-        Args:
-            config_str: Configuration string in the format "key value"
-        """
-        try:
-            key, value = config_str.split(" ", 1)
-            setattr(self.reasoning_engine, key, value)
-            self.interface.print_system_message(
-                f"Updated {key} to {value}", type="info"
-            )
-        except ValueError:
-            self.interface.print_system_message(
-                "Invalid config format. Use: 'key value'", type="error"
-            )
-        except AttributeError:
-            self.interface.print_system_message(
-                f"No reasoning engine available or invalid attribute: {key}",
-                type="error",
-            )
-
     async def run(self) -> None:
         """Run the agent in an interactive loop."""
         try:
@@ -500,9 +483,9 @@ class BaseAgent:
             while True:
                 query = self.interface.input("[User]: ")
 
-                if query.startswith(UPDATE_CONFIG_PREFIX):
-                    self.update_config(query[len(UPDATE_CONFIG_PREFIX) :])
-                    continue
+                # if query.startswith(UPDATE_CONFIG_PREFIX):
+                #     self.update_config(query[len(UPDATE_CONFIG_PREFIX) :])
+                #     continue
 
                 if query.lower() in EXIT_COMMANDS:
                     break
@@ -521,10 +504,18 @@ class BaseAgent:
         self.interface.print_history(self.history)
 
         if self.memory_manager and len(self.history) >= 6:
+            task = None
+            # save short term memories
+            if self.short_term_memory:
+                task = self.short_term_memory.save_memories()
+
             user_feedback = self.interface.input(
                 f"Please provide your feedback for the conversation with {self.agent_id}: "
             )
             await self.memory_manager.reflection_conversation(user_feedback)
+
+            if task:
+                await task
 
     def norm_message_type(
         self,
@@ -608,3 +599,11 @@ class BaseAgent:
                 self.interface.print_system_message(
                     f"Error storing tool interaction: {e}", type="error"
                 )
+
+    # def _update_reasoning_engine(self) -> None:
+    #     """Update the reasoning engine based on current state."""
+    #     engine = self.state_manager.chat_config.registry.get_engine(
+    #         self.state_manager.chat_config.current_engine.name
+    #     )
+    #     if engine:
+    #         self.reasoning_engine = engine

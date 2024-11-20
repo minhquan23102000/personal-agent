@@ -9,7 +9,6 @@ from loguru import logger
 from src.core.prompt.error_prompt import format_error_message
 from typing import TYPE_CHECKING
 
-
 if TYPE_CHECKING:
     from src.agent.base_agent import BaseAgent
     from src.memory.memory_manager import MemoryManager
@@ -19,11 +18,9 @@ class BaseLongTermMemory(BaseModel):
     knowledge_text: List[str] = Field(
         description="List of important knowledge or facts extracted from the conversation"
     )
-    entities: List[str] = Field(
-        description="List of important entities (people, concepts, objects, etc.) mentioned"
-    )
+    entities: List[str] = Field(description="List of important entities mentioned")
     entities_relationships: List[str] = Field(
-        description="List of relationships between entities in format 'entity1 relationship entity2'"
+        description="List of relationships between entities in format 'object relationship subject'"
     )
 
 
@@ -36,24 +33,30 @@ class BaseLongTermMemory(BaseModel):
     Focus on factual information, knowledge, key insights, and meaningful relationships between concepts or entities.
     
     Format each knowledge item as a separate, clear statement.
-    Format relationships as short and concise "entity1 relationship entity2" statements.
-    Do not include temporary information or contextual information for long-term memory. 
+    Format relationships as short and concise "object" "relationship" "subject".
     
     !! Important: Capture all essential information in this single interaction. Because you will only have one chance to store the information.
+    
+    Additional Context: 
+    {additional_context}
     """
 )
-def base_long_term_memory_prompt(history, notes): ...
+def base_long_term_memory_prompt(history, additional_context): ...
 
 
-async def save_long_term_memory(agent: "BaseAgent") -> None:
+async def save_long_term_memory(
+    agent: "BaseAgent",
+    additional_context: str = "",
+    include_message_history: bool = True,
+) -> None:
     """Extract and save important information to long-term memory."""
     try:
         if not agent.memory_manager:
             return
 
         prompt = base_long_term_memory_prompt(
-            history=agent._build_prompt(),
-            notes=agent.short_term_memory.format_memories(),
+            history=agent._build_prompt(include_history=include_message_history),
+            additional_context=additional_context,
         )
 
         @retry(
@@ -103,16 +106,7 @@ async def store_update_knowledge(
     entities: List[str],
     entities_relationship: List[str],
 ) -> str:
-    """Save important information, knowledge, facts to your long-term memory.
-
-    You can use this function in the following scenarios:
-    - When you learn something new
-    - When you have a realization
-    - When you have a new idea
-    - When you have a new feeling
-    - When you encounter important information
-
-    Ensure you include all informations, facts, knowledge you want to store in one call.
+    """Save important information, knowledge, facts to  long-term memory.
 
     Args:
         self: self.
@@ -131,27 +125,16 @@ async def store_update_knowledge(
         if knowledge_text:
 
             for knowledge in knowledge_text:
-                similar_knowledge = await memory_manager.search_similar_knowledge(
-                    query=knowledge, threshold=duplicate_threshold
+
+                await memory_manager.store_knowledge(
+                    text=knowledge,
+                    entities=entities,
+                    keywords=entities,
                 )
-                if similar_knowledge:
-                    continue
-                else:
-                    await memory_manager.store_knowledge(
-                        text=knowledge,
-                        entities=entities,
-                        keywords=entities,
-                    )
 
         if entities_relationship:
             for rel_text in entities_relationship:
-                similar_rel = await memory_manager.search_similar_entities(
-                    query=rel_text, threshold=duplicate_threshold
-                )
 
-            if similar_rel:
-                existing_relationships.append(similar_rel)
-            else:
                 await memory_manager.store_entity_relationship(
                     relationship_text=rel_text
                 )

@@ -17,15 +17,8 @@ class LongtermMemoryToolKit(BaseToolKit):
     similarity_threshold: float = 0.7
 
     @toolkit_tool
-    async def recall_knowledge_facts(self, query: str) -> str:
-        """Recall knowledge, facts from your long-term memory in external long term memory database.
-
-        You can use this function in the following scenarios:
-        - When you need to recall important information
-        - When you need to find a specific fact
-        - When you need to find related knowledges
-
-        Use this when you do not have context in the current moment for a specific topic user asking or for task you are working on.
+    async def recall_lost_memory(self, query: str) -> str:
+        """Access relevant information, memories from your long-term memory database to provide context or details on the topic the user is inquiring about, especially when lacking immediate context for the task at hand.
 
         Args:
             query (str): The query string used to search for relevant knowledge.

@@ -56,12 +56,14 @@ class FileManagerToolkit(BaseToolKit):
             InputFormat.HTML,
             InputFormat.PPTX,
             InputFormat.MD,
+            InputFormat.ASCIIDOC,
+            InputFormat.IMAGE,
         ]
     )
 
     @toolkit_tool
     def read_file(self, file_path: str) -> str:
-        """Read and return the contents of a file.
+        """Read and return the contents of a file as a string.
 
         Args:
             file_path: Relative path to the text file from base_path
@@ -70,12 +72,12 @@ class FileManagerToolkit(BaseToolKit):
         try:
             with open(full_path, "r", encoding="utf-8") as f:
                 return f.read()
-        except (FileNotFoundError, PermissionError) as e:
+        except Exception as e:
             return f"Error reading file: {str(e)}"
 
     @toolkit_tool
     def write_file(self, file_path: str, content: str) -> str:
-        """Write content to a file.
+        """Write text content to a file.
 
         Args:
             self: self.
@@ -106,8 +108,8 @@ class FileManagerToolkit(BaseToolKit):
             return f"Error processing document: {str(e)}"
 
     @toolkit_tool
-    def list_directory(self, dir_path: str) -> str:
-        """List contents of a directory in a tree format, ignoring files specified in .gitignore and the .git folder."""
+    def print_folder_structure(self, dir_path: str) -> str:
+        """See files structure of a directory"""
         full_path = Path(dir_path)
         gitignore_parser = GitignoreParser()
         gitignore_parser.load_gitignore(full_path)
