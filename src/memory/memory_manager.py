@@ -558,6 +558,8 @@ class MemoryManager:
 
             latest_conv = latest_conversations[0]
 
+            logger.info(f"Last conversation id: {latest_conv.conversation_id}")
+
             # Check if reflection exists for this conversation
             has_reflection = await self.db.has_reflection(latest_conv.conversation_id)
             if has_reflection:

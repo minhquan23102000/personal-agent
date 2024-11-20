@@ -14,13 +14,7 @@ def validate_urls_count(urls: List[str]) -> List[str]:
 
 
 class WebReaderTool(BaseTool):
-    """This tool allows you to read and extract content from multiple web pages. After conducting a web search, you can use it to review the details of the pages you find.
-
-    Input a list of URLs to read content from.
-
-    Examples:
-        urls: ["https://example.com", "https://example.org"]
-    """
+    """This tool allows you to read and extract content from multiple web pages. After conducting a web search, you can use it to review the details of the pages you find."""
 
     urls: List[str] = Field(
         ...,

@@ -62,6 +62,8 @@ class AgentStateManager:
             if engine:
                 formatted += f"  * {engine_name}: {engine.description}\n"
 
+        formatted += "\n\nRemember to use the state_manager.switch_chat_mode(engine_name) to change the chat mode when necessary."
+
         return formatted
 
     def register_list_engines(self, engines: List[BaseReasoningEngine]) -> None:

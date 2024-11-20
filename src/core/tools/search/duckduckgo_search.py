@@ -21,15 +21,6 @@ class DuckDuckGoSearchTool(BaseTool):
     """
     A tool for performing web searches using DuckDuckGo search engine.
     This tool is useful for finding information on the internet.
-    You can use this tools to research topics, find answers to questions, or get information on specific people, companies, events, etc.
-
-    !!IMPORTANT: THIS IS JUST RETURN URL, TITLE, SUMMARY OF THE SEARCH NOT THE FULL CONTEXT. YOU MAY NEED USE WEB_READER TOOL TO LOAD THE DETAIL CONTENT.
-
-    Examples:
-        - Finding information on "Latest developments in AI 2024"
-        - Researching "Python programming best practices"
-        - Getting information on "Twitter: Elon Musk"
-        - Checking the "Tokyo weather"
     """
 
     query: str = Field(
