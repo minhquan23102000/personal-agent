@@ -1,3 +1,4 @@
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, List, Optional, Dict, Any
 from mirascope.core import BaseToolKit, toolkit_tool
@@ -137,11 +138,19 @@ class ShortTermMemoryToolKit(BaseToolKit):
             del self.memories[oldest_key]
 
         # store to longterm
-        await save_long_term_memory(
-            agent=self.agent,
-            additional_context=self.format_memories(),
-            include_message_history=False,
-        )
+        if old_memories:
+            # copy a deep copy self
+            orignal_memories = self.memories.copy()
+
+            self.memories = old_memories
+
+            await save_long_term_memory(
+                agent=self.agent,
+                additional_context=self.format_memories(),
+                include_message_history=False,
+            )
+
+            self.memories = orignal_memories
 
     def format_memories(self) -> str:
         """Format all memories for inclusion in system prompt."""
