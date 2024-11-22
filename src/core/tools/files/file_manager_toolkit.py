@@ -88,8 +88,13 @@ class FileManagerToolkit(BaseToolKit):
 
         try:
             full_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(full_path, "w", encoding="utf-8", newline="") as f:
-                f.write(content)
+            # Convert all newlines to system's native newline character
+            normalized_content = os.linesep.join(content.splitlines())
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write(normalized_content)
+                # Ensure file ends with a newline
+                if normalized_content and not normalized_content.endswith(os.linesep):
+                    f.write(os.linesep)
             return f"Successfully wrote content to {file_path}"
         except Exception as e:
             return f"Error writing file: {str(e)}"
