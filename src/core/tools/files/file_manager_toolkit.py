@@ -85,9 +85,10 @@ class FileManagerToolkit(BaseToolKit):
             content: The text content to write
         """
         full_path = Path(file_path)
+
         try:
             full_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(full_path, "w", encoding="utf-8") as f:
+            with open(full_path, "w", encoding="utf-8", newline="") as f:
                 f.write(content)
             return f"Successfully wrote content to {file_path}"
         except Exception as e:

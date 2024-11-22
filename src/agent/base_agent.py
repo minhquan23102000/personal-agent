@@ -450,17 +450,19 @@ class BaseAgent:
 
         return False, response
 
-    async def step(self, query: Messages.Type) -> Optional[str]:
+    async def step(self, query: Messages.Type | None = None) -> Optional[str]:
         """Execute one step of the agent's reasoning process."""
         try:
-            await self.store_turn_message(query, "user")
-            self.history.append(query)
+            if query:
+                await self.store_turn_message(query, "user")
+                self.history.append(query)
 
             current_engine = self.state_manager.chat_config.current_engine
 
             if current_engine:
                 await current_engine.run(self)
             else:
+                # chat mode
                 use_tool_call, response = await self._default_step()
                 if use_tool_call:
                     return await self.step(Messages.User(""))
